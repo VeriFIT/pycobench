@@ -15,9 +15,6 @@ from statistics import StatisticsParser, StatsFormat
 #  fmt = 'text'
 fmt = "csv"
 
-# number of parameters of execution
-__PYCO_PROC_PARAMS_NUM = 1
-
 
 class StatsDestination(Enum):
     """Output destination for statistics."""
@@ -62,11 +59,11 @@ def proc_res(fd, args):
 
     for row in reader:
         assert (
-            len(row) >= 1 + 1 + __PYCO_PROC_PARAMS_NUM
+            len(row) >= 1 + 1 + args.params_num
         )  # status + engine name + params
         status, eng = row[0], row[1]
-        params = tuple(row[2 : (__PYCO_PROC_PARAMS_NUM + 2)])
-        row_tail = row[(__PYCO_PROC_PARAMS_NUM + 2) :]
+        params = tuple(row[2 : (args.params_num + 2)])
+        row_tail = row[(args.params_num + 2) :]
         if params not in results:
             results[params] = dict()
         if eng not in engines:
@@ -323,8 +320,6 @@ def parse_args():
                               argument: '%(const)s')",
     )
     args = parser.parse_args()
-
-    __PYCO_PROC_PARAMS_NUM = args.params_num
 
     if args.stats:
         args.stats = StatsDestination[args.stats.upper()]
