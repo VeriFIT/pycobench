@@ -90,9 +90,6 @@ g_cnt_finished_tasks = 0
 # should we be verbose
 g_verbose = False
 
-# should we be verbose
-g_verbose = False
-
 # cpu affinity
 g_cpu_affinity = list(range(os.cpu_count() or 0))  # by default, all CPUs
 g_bind_to_cpu = False
