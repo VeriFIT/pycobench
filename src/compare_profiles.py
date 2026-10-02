@@ -34,7 +34,8 @@ def load_dataframe(path):
 if __name__ == "__main__":
     profiles = sys.argv[1:]
     if len(profiles) == 0:
-        printf(f"usage: compare_profiles.py [target.csv baseline1.csv ... baselinen.csv]")
+        print("usage: compare_profiles.py [target.csv baseline1.csv ... baselinen.csv]", file=sys.stderr)
+        sys.exit(1)
 
     averages, medians, timeouts = [], [], []
     columns, to_columns = set(), set()
