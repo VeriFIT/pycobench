@@ -10,7 +10,7 @@ from enum import Enum
 from pathlib import Path
 
 from tabulate import tabulate
-from statistics import StatisticsParser, StatsFormat
+from pyco_statistics import StatisticsParser, StatsFormat
 
 #  fmt = 'text'
 fmt = "csv"
