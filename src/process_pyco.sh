@@ -23,7 +23,7 @@ output_file=result.csv
 benchmarks=()
 basedir=$(realpath $(dirname "$0"))
 rootdir=$(realpath "$basedir/..")
-python="$rootdir/.venv/bin/python3"
+python="${PYCOBENCH_PYTHON:-$rootdir/.venv/bin/python3}"
 [ -x "$python" ] || { echo "error: Python environment not found at $python. Run 'uv sync' in $rootdir first." >&2; exit 1; }
 number_of_params=1
 
@@ -81,7 +81,7 @@ do
     echo "Processing $benchmark_file"
     echo "Benchmark file: $benchmark_file"
     echo "Benchmark: $benchmark"
-    env -u PYTHONPATH "$python" "$rootdir"/src/pyco_proc.py --csv --params-num "$number_of_params" --output "$result_file.csv" "$benchmark_file"
+    env -u PYTHONPATH "$python" "$basedir"/pyco_proc.py --csv --params-num "$number_of_params" --output "$result_file.csv" "$benchmark_file"
     if [ $processed_header = false ];
     then
       # For first result we ensure that the header will be there

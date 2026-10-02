@@ -45,6 +45,9 @@
                 --set PYTHONPATH "$out/share/pycobench"
             done
 
+            makeWrapper "$out/share/pycobench/process_pyco.sh" "$out/bin/process_pyco" \
+              --set PYCOBENCH_PYTHON "${pythonEnv}/bin/python3"
+
             runHook postInstall
           '';
 
@@ -60,6 +63,18 @@
           program = "${pycobench}/bin/pycobench";
         };
         apps.pycobench = self.apps.${system}.default;
+        apps.pyco_proc = {
+          type = "app";
+          program = "${pycobench}/bin/pyco_proc";
+        };
+        apps.compare_profiles = {
+          type = "app";
+          program = "${pycobench}/bin/compare_profiles";
+        };
+        apps.process_pyco = {
+          type = "app";
+          program = "${pycobench}/bin/process_pyco";
+        };
 
         devShells.default = pkgs.mkShell {
           name = "pycobench-dev";
