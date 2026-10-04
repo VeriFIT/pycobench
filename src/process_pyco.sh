@@ -21,7 +21,7 @@ usage() { {
 
 output_file=result.csv
 benchmarks=()
-basedir=$(realpath $(dirname "$0"))
+basedir=$(realpath "$(dirname "$0")")
 rootdir=$(realpath "$basedir/..")
 python="${PYCOBENCH_PYTHON:-$rootdir/.venv/bin/python3}"
 [ -x "$python" ] || { echo "error: Python environment not found at $python. Run 'uv sync' in $rootdir first." >&2; exit 1; }
@@ -40,7 +40,7 @@ while [ $# -gt 0 ]; do
             number_of_params=$2
             shift 2;;
         *)
-            benchmarks+=( $1 )
+            benchmarks+=( "$1" )
             shift 1;;
     esac
 done
@@ -71,7 +71,7 @@ processed_header=false
 
 
 # For each benchmark
-for benchmark in ${benchmarks[@]}
+for benchmark in "${benchmarks[@]}"
 do
     # We ensure that the results are in results/data directory
     result_file=$(basename "$benchmark")
