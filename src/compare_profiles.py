@@ -1,10 +1,12 @@
-import tabulate
-import pandas
-import sys
-import numpy
+#!/usr/bin/env python3
 
-# the cells pyco_proc writes instead of measurements, by the run status they
-# stand for
+import sys
+
+import numpy
+import pandas
+import tabulate
+
+# The cells pyco_proc writes instead of measurements, by the run status they stand for.
 OUTCOME_CELLS = {
     "TO": "timeouts",
     "MO": "memouts",
@@ -17,8 +19,7 @@ def load_dataframe(path):
     """Loads from @path pandas dataframe and computes averages and medians in each metric
 
     :param path: path to csv file delimited by ;
-    :return: averages and medians of each column, and the counts of the runs
-        that produced no measurement
+    :return: averages and medians of each column, and the counts of the runs that produced no measurement
     """
 
     def transform(cell):
@@ -34,7 +35,7 @@ def load_dataframe(path):
         df = pandas.read_csv(path, sep=";")
     except Exception as ex:
         print(f"error while reading from {path}: {ex}")
-        exit(1)
+        sys.exit(1)
     outcomes = {
         col: {cell: int(df[col].value_counts().get(cell, 0)) for cell in OUTCOME_CELLS}
         for col in df.columns
@@ -91,8 +92,8 @@ if __name__ == "__main__":
 
     print()
 
-    # Summary of the runs that produced no measurement; only the outcomes that
-    # actually occurred are reported
+    # Summary of the runs that produced no measurement.
+    # Only the outcomes that actually occurred are reported.
     reported_cells = [
         cell
         for cell in OUTCOME_CELLS
