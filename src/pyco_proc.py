@@ -9,8 +9,8 @@ import sys
 from enum import Enum
 from pathlib import Path
 
-from tabulate import tabulate
 from pyco_statistics import StatisticsParser, StatsFormat
+from tabulate import tabulate
 
 #  fmt = 'text'
 fmt = "csv"
@@ -33,8 +33,8 @@ class RunResult(Enum):
     CRASH = 5
 
 
-# how a run that produced no measurements is rendered in every cell of its
-# engine; "finished" is the only status with data to print instead
+# How a run that produced no measurements is rendered in every cell of its engine.
+# "finished" is the only status with data to print instead.
 RUN_RESULT_CELLS = {
     RunResult.ERROR: "ERR",
     RunResult.TIMEOUT: "TO",
@@ -42,7 +42,7 @@ RUN_RESULT_CELLS = {
     RunResult.CRASH: "CRASH",
 }
 
-# the status written by pycobench for each unsuccessful run
+# The status written by pycobench for each unsuccessful run.
 STATUS_RUN_RESULTS = {
     "error": RunResult.ERROR,
     "timeout": RunResult.TIMEOUT,
@@ -69,9 +69,9 @@ def proc_res(fd, args):
         fd, delimiter=";", quotechar='"', doublequote=False, quoting=csv.QUOTE_MINIMAL
     )
 
-    engines = list()
-    engines_outs = dict()
-    results = dict()
+    engines = []
+    engines_outs = {}
+    results = {}
 
     current_time = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
     if args.stats and args.stats == StatsDestination.SEPARATE_FILES:
@@ -83,10 +83,10 @@ def proc_res(fd, args):
         params = tuple(row[2 : (args.params_num + 2)])
         row_tail = row[(args.params_num + 2) :]
         if params not in results:
-            results[params] = dict()
+            results[params] = {}
         if eng not in engines:
             engines.append(eng)
-            engines_outs[eng] = list()
+            engines_outs[eng] = []
             # engines_outs[eng] = ["result"]
 
         # we don't have some results twice
@@ -100,11 +100,11 @@ def proc_res(fd, args):
                 row_tail[3],
             )
 
-            eng_res = dict()
+            eng_res = {}
             eng_res["runtime"] = runtime
             eng_res["retcode"] = retcode
             eng_res["error"] = err
-            eng_res["output"] = dict()
+            eng_res["output"] = {}
             eng_res["run_result"] = RunResult.FINISHED
             name = ""
 
@@ -173,15 +173,15 @@ def proc_res(fd, args):
                         engines_outs[eng].append(name)
                     eng_res["output"][name] = val
 
-            # the peak memory, when the time command of the run reported it
+            # The peak memory, when the time command of the run reported it.
             maxrss = row_tail[4] if len(row_tail) > 4 else ""
             if maxrss:
                 if "maxrss" not in engines_outs[eng]:
                     engines_outs[eng].append("maxrss")
                 eng_res["output"]["maxrss"] = maxrss
 
-            # the answer the return code stands for, as configured in
-            # "return_codes"; what the engine printed itself wins over it
+            # The answer the return code stands for, as configured in "return_codes".
+            # What the engine printed itself wins over it.
             mapped_result = row_tail[5] if len(row_tail) > 5 else ""
             if mapped_result:
                 printed_result = eng_res["output"].get("result")
@@ -201,13 +201,13 @@ def proc_res(fd, args):
             results[params][eng] = {}
             results[params][eng]["run_result"] = STATUS_RUN_RESULTS[status]
         elif status != "execute":
-            # "execute" rows are the task list pycobench writes before running
-            # anything; everything else is a status this version cannot render
+            # "execute" rows are the task list pycobench writes before running anything.
+            # Everything else is a status this version cannot render.
             sys.stderr.write(
                 f"Warning: in {params} and {eng}: unknown run status '{status}'\n"
             )
 
-    list_ptrns = list()
+    list_ptrns = []
     for bench in results:
         all_engs = True
         ls = list(bench)
@@ -271,7 +271,7 @@ def proc_res(fd, args):
 
         list_ptrns.append(ls)
 
-    header = list()
+    header = []
     if args.tick:
         header += ["T"]
 
@@ -310,7 +310,7 @@ def proc_res(fd, args):
         writer.writerows(list_ptrns)
         return output.getvalue()
     else:
-        raise Exception('Invalid output format: "{}"'.format(fmt))
+        raise Exception(f'Invalid output format: "{fmt}"')
 
 
 def parse_args():
@@ -348,16 +348,14 @@ def parse_args():
     )
     parser.add_argument(
         "--stats-format",
-        choices=list(format_option.name.lower() for format_option in StatsFormat),
+        choices=[format_option.name.lower() for format_option in StatsFormat],
         default=StatsFormat.JSON.value,
         help="Which format to use for printing statistics (default: '%(default)s')",
     )
     parser.add_argument(
         "--stats",
         nargs="?",
-        choices=list(
-            destination_option.name.lower() for destination_option in StatsDestination
-        ),
+        choices=[destination_option.name.lower() for destination_option in StatsDestination],
         const="output_file",
         default=None,
         help="Whether to output statistics and where (default: skipping stats, flag without \
