@@ -72,8 +72,9 @@ g_memout = None
 # can be later used for restarting a prematurely stopped benchmark.
 g_tasks = "pycobench.tasks"
 
-# the command to measure CPU time
-g_time_cmd = ["/usr/bin/time", "-p"]
+# the command to measure CPU time; resolved through PATH, so a GNU time binary
+# installed anywhere on PATH (not necessarily /usr/bin/time) is used
+g_time_cmd = ["time", "-p"]
 
 # the command for hard timeout
 g_timeout_cmd = ["timeout", "-s", "KILL"]
