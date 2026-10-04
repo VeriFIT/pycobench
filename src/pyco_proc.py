@@ -29,6 +29,26 @@ class RunResult(Enum):
     FINISHED = 1
     ERROR = 2
     TIMEOUT = 3
+    MEMOUT = 4
+    CRASH = 5
+
+
+# how a run that produced no measurements is rendered in every cell of its
+# engine; "finished" is the only status with data to print instead
+RUN_RESULT_CELLS = {
+    RunResult.ERROR: "ERR",
+    RunResult.TIMEOUT: "TO",
+    RunResult.MEMOUT: "MO",
+    RunResult.CRASH: "CRASH",
+}
+
+# the status written by pycobench for each unsuccessful run
+STATUS_RUN_RESULTS = {
+    "error": RunResult.ERROR,
+    "timeout": RunResult.TIMEOUT,
+    "memout": RunResult.MEMOUT,
+    "crash": RunResult.CRASH,
+}
 
 
 class InnerBlockType(Enum):
@@ -58,9 +78,7 @@ def proc_res(fd, args):
         Path(f"./stats/{current_time}/").mkdir(parents=True, exist_ok=True)
 
     for row in reader:
-        assert (
-            len(row) >= 1 + 1 + args.params_num
-        )  # status + engine name + params
+        assert len(row) >= 1 + 1 + args.params_num  # status + engine name + params
         status, eng = row[0], row[1]
         params = tuple(row[2 : (args.params_num + 2)])
         row_tail = row[(args.params_num + 2) :]
@@ -155,13 +173,39 @@ def proc_res(fd, args):
                         engines_outs[eng].append(name)
                     eng_res["output"][name] = val
 
+            # the peak memory, when the time command of the run reported it
+            maxrss = row_tail[4] if len(row_tail) > 4 else ""
+            if maxrss:
+                if "maxrss" not in engines_outs[eng]:
+                    engines_outs[eng].append("maxrss")
+                eng_res["output"]["maxrss"] = maxrss
+
+            # the answer the return code stands for, as configured in
+            # "return_codes"; what the engine printed itself wins over it
+            mapped_result = row_tail[5] if len(row_tail) > 5 else ""
+            if mapped_result:
+                printed_result = eng_res["output"].get("result")
+                if printed_result is None:
+                    if "result" not in engines_outs[eng]:
+                        engines_outs[eng].append("result")
+                    eng_res["output"]["result"] = mapped_result
+                elif printed_result != mapped_result:
+                    sys.stderr.write(
+                        f"Warning: in {params} and {eng}: the engine printed result "
+                        f"'{printed_result}' while its return code maps to "
+                        f"'{mapped_result}'; keeping the printed one\n"
+                    )
+
             results[params][eng] = eng_res
-        elif status == "error":
+        elif status in STATUS_RUN_RESULTS:
             results[params][eng] = {}
-            results[params][eng]["run_result"] = RunResult.ERROR
-        elif status == "timeout":
-            results[params][eng] = {}
-            results[params][eng]["run_result"] = RunResult.TIMEOUT
+            results[params][eng]["run_result"] = STATUS_RUN_RESULTS[status]
+        elif status != "execute":
+            # "execute" rows are the task list pycobench writes before running
+            # anything; everything else is a status this version cannot render
+            sys.stderr.write(
+                f"Warning: in {params} and {eng}: unknown run status '{status}'\n"
+            )
 
     list_ptrns = list()
     for bench in results:
@@ -172,17 +216,17 @@ def proc_res(fd, args):
             if eng in results[bench]:
                 bench_res = results[bench][eng]
                 for out in engines_outs[eng]:
-                    if out == "stats":
+                    if out == "stats" and "output" in bench_res:
                         bench_res["output"][out] = StatisticsParser.stats_formatter(
                             bench_res["output"][out], args.stats_format
                         )
 
-                if bench_res["run_result"] == RunResult.ERROR:
+                if bench_res["run_result"] in RUN_RESULT_CELLS:
+                    # the run produced no measurements, so every column of the
+                    # engine says why
+                    cell = RUN_RESULT_CELLS[bench_res["run_result"]]
                     for i in range(out_len):
-                        ls.append("ERR")
-                elif bench_res["run_result"] == RunResult.TIMEOUT:
-                    for i in range(out_len):
-                        ls.append("TO")
+                        ls.append(cell)
                 else:
                     assert type(bench_res) == dict
                     assert "output" in bench_res
