@@ -13,6 +13,11 @@
 #     configuration file.
 #     * The configuration file is a YAML where each engine is given a command
 #       to run (with $1, $2, $3,... denoting input parameters).
+#     * An engine can also set "accepted_return_codes", the list of return
+#       codes that mark a run as successful (backwards-compatible default
+#       [0, 1]); any other return code marks the run as an error.  Settings
+#       shared by all engines can be given once in a top-level "defaults"
+#       section and are overridden by per-engine values.
 #   * Benchmarks are provided on standard input, one per line.  Each line
 #  # FIXME: semicolon-separated?
 #     contains a whitespace-separated list of parameters (which are then input
@@ -67,8 +72,9 @@ g_memout = None
 # can be later used for restarting a prematurely stopped benchmark.
 g_tasks = "pycobench.tasks"
 
-# the command to measure CPU time
-g_time_cmd = ["/usr/bin/time", "-p"]
+# the command to measure CPU time; resolved through PATH, so a GNU time binary
+# installed anywhere on PATH (not necessarily /usr/bin/time) is used
+g_time_cmd = ["time", "-p"]
 
 # the command for hard timeout
 g_timeout_cmd = ["timeout", "-s", "KILL"]
@@ -93,6 +99,14 @@ g_verbose = False
 # cpu affinity
 g_cpu_affinity = list(range(os.cpu_count() or 0))  # by default, all CPUs
 g_bind_to_cpu = False
+
+# return codes marking a successful run when neither the method nor the
+# "defaults" configuration section sets "accepted_return_codes" (kept as {0, 1}
+# for backwards compatibility: solvers often return 1 for legitimate results)
+g_default_accepted_return_codes = [0, 1]
+
+# the configuration key under which default per-method settings can be given
+g_defaults_key = "defaults"
 
 #############################################
 
@@ -183,11 +197,13 @@ def limit_virtual_memory(cpu_affinity):
 
 
 ###########################################
-def run_subproc_systime(cmd, cpu_affinity):
-    """run_subproc(cmd, cpu_affinity) -> dict()
+def run_subproc_systime(cmd, cpu_affinity, accepted_return_codes):
+    """run_subproc_systime(cmd, cpu_affinity, accepted_return_codes) -> dict()
 
     Runs a command as a subprocess and collects results.  The time consumed is
-    measured using system "time" command.
+    measured using system "time" command.  Only the return codes in
+    "accepted_return_codes" are considered successful; any other return code
+    raises CalledProgramError.
     """
     cmd = g_time_cmd + cmd
     proc = subprocess.Popen(
@@ -227,11 +243,7 @@ def run_subproc_systime(cmd, cpu_affinity):
     result["stdout"] = result["stdout"][-OUTPUT_LIMIT:]
     result["stderr"] = result["stderr"][-OUTPUT_LIMIT:]
 
-    # FIXME: from mata-comparison
-    # if result.get("timeout", False) == True:
-    #     return result
-    # if result["retcode"] not in {0}:
-    if result["retcode"] not in {0, 1}:
+    if result["retcode"] not in accepted_return_codes:
         raise CalledProgramError(result["stderr"])
 
     # extract the output of the time command from stderr
@@ -308,14 +320,15 @@ def execute_benchmark(params, cpu_affinity):
 
     try:
         # result = run_subproc(cmd)
-        # result = run_subproc_systime(cmd, cpu_affinity)
         executed_cmd = []
         for c in cmd:
             if "*" in c:
                 executed_cmd.extend(sorted(glob.glob(c)))
             else:
                 executed_cmd.append(c)
-        result = run_subproc_systime(executed_cmd, cpu_affinity)
+        result = run_subproc_systime(
+            executed_cmd, cpu_affinity, g_cmd_dict[name]["accepted_return_codes"]
+        )
         return result
     except subprocess.TimeoutExpired:
         return {"timeout": True}
@@ -424,11 +437,29 @@ def process_conf_file(conf_file):
     """
     global g_cmd_dict
     config = yaml.load(conf_file, Loader=yaml.FullLoader)
+
+    # values in the "defaults" section apply to every method that does not
+    # override them itself
+    defaults = config.pop(g_defaults_key, {}) or {}
+
     g_cmd_dict = config
     for meth in g_cmd_dict:
         x = g_cmd_dict[meth]
-        if "cmd" not in x:
+        if x is None:
+            raise Exception('Missing configuration for method "{}"'.format(meth))
+        merged = {**defaults, **x}
+        if "cmd" not in merged:
             raise Exception('Missing "cmd" value for method "{}"'.format(meth))
+        accepted = merged.get("accepted_return_codes", g_default_accepted_return_codes)
+        if not isinstance(accepted, list) or not all(
+            isinstance(retcode, int) for retcode in accepted
+        ):
+            raise Exception(
+                '"accepted_return_codes" for method "{}" must be '
+                "a list of integers".format(meth)
+            )
+        merged["accepted_return_codes"] = accepted
+        g_cmd_dict[meth] = merged
 
 
 ###########################################
