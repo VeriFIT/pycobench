@@ -168,7 +168,16 @@ def proc_res(fd, args):
                         continue
                     name, val = spl[0].strip(), spl[1].strip()
 
-                    assert name not in eng_res["output"]
+                    # A program may run the same operation several times; the
+                    # timings of the repeats add up to the time spent in it,
+                    # while repeated non-numeric values are kept side by side
+                    # so a disagreement stays visible.
+                    previous = eng_res["output"].get(name)
+                    if previous is not None:
+                        try:
+                            val = repr(float(previous) + float(val))
+                        except ValueError:
+                            val = f"{previous},{val}"
                     if name not in engines_outs[eng]:
                         engines_outs[eng].append(name)
                     eng_res["output"][name] = val
