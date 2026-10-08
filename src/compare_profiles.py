@@ -7,13 +7,7 @@ import numpy
 import pandas
 import tabulate
 
-# The cells pyco_proc writes instead of measurements, by the run status they stand for.
-OUTCOME_CELLS = {
-    "TO": "timeouts",
-    "MO": "memouts",
-    "ERR": "errors",
-    "CRASH": "crashes",
-}
+from pyco_results import OUTCOME_CELLS
 
 
 def load_dataframe(path, timeout=None, penalties=None):
