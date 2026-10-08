@@ -7,7 +7,11 @@
   };
 
   outputs =
-    { self, nixpkgs, flake-utils }:
+    {
+      self,
+      nixpkgs,
+      flake-utils,
+    }:
     flake-utils.lib.eachDefaultSystem (
       system:
       let
@@ -16,6 +20,7 @@
         # Keep in sync with the `dependencies` in pyproject.toml.
         pythonEnv = pkgs.python3.withPackages (
           ps: with ps; [
+            matplotlib
             pandas
             psutil
             pyyaml
