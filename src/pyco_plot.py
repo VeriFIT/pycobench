@@ -12,8 +12,8 @@ For one metric (wall-clock "runtime" by default) it writes, into an output direc
     distribution of the metric,
   * ``pairwise-<metric>.{md,tex,csv}`` -- per engine against the baseline, how often it wins and by
     how much,
-  * ``disagreements-<metric>.csv`` -- the instances on which the engines reported different answers
-    (only when the engines report a "result" metric).
+  * ``disagreements.csv`` -- the instances on which the engines reported different answers (when
+    at least two engines report a "result" metric).
 
 The engines and their metrics are read off the table's header, so nothing here is specific to any
 particular benchmark, tool or operation.
@@ -222,12 +222,14 @@ def pairwise_table(results, metric, baseline, timeout):
 
 
 def disagreements(results):
-    """The instances on which the engines did not report the same answer."""
-    if not all((engine, RESULT_METRIC) in results.cells.columns for engine in results.engines):
-        return None
+    """The instances on which the engines that report an answer did not report the same one."""
     answers = results.text(RESULT_METRIC)
+    # An engine that never printed an answer (one that cannot, or that timed out on every
+    # instance) has no column: the others are still compared.
+    if answers.shape[1] < 2:
+        return None
     # Only runs that finished have an answer to compare.
-    comparable = answers.where(results.status == "")
+    comparable = answers.where(results.status[answers.columns] == "")
     differing = comparable.apply(lambda row: row.dropna().nunique() > 1, axis=1)
     return answers[differing]
 
