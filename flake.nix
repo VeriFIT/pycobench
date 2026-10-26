@@ -44,7 +44,7 @@
             mkdir -p "$out/share/pycobench" "$out/bin"
             cp -r src/. "$out/share/pycobench/"
 
-            for script in pycobench pyco_proc compare_profiles; do
+            for script in pycobench pyco_proc pyco_merge compare_profiles; do
               makeWrapper ${pythonEnv}/bin/python3 "$out/bin/$script" \
                 --add-flags "$out/share/pycobench/$script.py" \
                 --set PYTHONPATH "$out/share/pycobench"
