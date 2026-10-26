@@ -6,6 +6,7 @@ Contents:
 * `src/pyco_proc.py`: The script for processing the output of `pycobench.py` into a table
 * `src/compare_profiles.py`: Compares averages/medians/timeouts across one or more result CSVs
 * `src/pyco_merge.py`: Merges the result tables of repeated runs into one, keeping the minimum of every measurement
+* `src/pyco_manifest.py`: Records the engines, settings, input hashes, repository revisions and machine of a run as JSON
 * `examples/ba-compl.yaml`: Example of a YAML file for configuring what to run
 * `examples/ba-all.input`: Example of a file with input benchmarks
 
