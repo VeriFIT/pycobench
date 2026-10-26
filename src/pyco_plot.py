@@ -12,8 +12,16 @@ For one metric (wall-clock "runtime" by default) it writes, into an output direc
     distribution of the metric,
   * ``pairwise-<metric>.{md,tex,csv}`` -- per engine against the baseline, how often it wins and by
     how much,
+  * ``summary-by-family-<metric>.{md,tex,csv}`` -- per family of instances (given by --families)
+    and engine, how many runs finished and their PAR-2 score,
+  * ``answers.{md,csv}`` -- per engine, how many finished runs gave each answer (when the engines
+    report a "result" metric),
   * ``disagreements.csv`` -- the instances on which the engines reported different answers (when
     at least two engines report a "result" metric).
+
+With --solved, a run that finished without one of the given answers (e.g. an SMT solver giving up
+with "unknown") is counted as unsolved: it is scored and drawn like a failure, and only the answers
+of solved runs are cross-checked.
 
 The engines and their metrics are read off the table's header, so nothing here is specific to any
 particular benchmark, tool or operation.
@@ -28,7 +36,7 @@ import pandas
 import tabulate
 
 import pyco_results
-from pyco_results import OUTCOME_CELLS
+from pyco_results import STATUS_CELLS
 
 # Written next to the figures so that a report can be regenerated with different options.
 TABLE_FORMATS = {"md": "github", "tex": "latex_booktabs"}
@@ -165,17 +173,17 @@ def summary_table(results, metric, timeout):
     """Per engine: how the runs ended and how the metric is distributed over the finished ones."""
     values = results.numeric(metric)
     counts = results.status_counts()
+    penalised = results.numeric(metric, timeout=timeout, penalties={cell: 2.0 for cell in STATUS_CELLS})
     rows = []
     for engine in results.engines:
         finished = values.loc[results.status[engine] == "", engine].dropna()
-        penalised = results.numeric(metric, timeout=timeout, penalties={cell: 2.0 for cell in OUTCOME_CELLS})
         row = {
             "engine": engine,
             "instances": len(values),
             "finished": int(counts.loc[engine, "finished"]),
         }
         row.update(
-            {OUTCOME_CELLS[cell]: int(counts.loc[engine, cell]) for cell in OUTCOME_CELLS}
+            {STATUS_CELLS[cell]: int(counts.loc[engine, cell]) for cell in STATUS_CELLS}
         )
         row.update(
             {
@@ -189,7 +197,37 @@ def summary_table(results, metric, timeout):
         rows.append(row)
     table = pandas.DataFrame(rows)
     # Columns nobody failed in only add noise.
-    return table.drop(columns=[name for name in OUTCOME_CELLS.values() if (table[name] == 0).all()])
+    return table.drop(columns=[name for name in STATUS_CELLS.values() if (table[name] == 0).all()])
+
+
+def family_table(results, metric, timeout, families):
+    """Per family of instances and engine: how many runs finished and their PAR-2 score."""
+    penalised = results.numeric(metric, timeout=timeout, penalties={cell: 2.0 for cell in STATUS_CELLS})
+    family = families.reindex(results.instances).fillna("?")
+    rows = []
+    for name in dict.fromkeys(family):
+        members = (family == name).to_numpy()
+        row = {"family": name, "instances": int(members.sum())}
+        for engine in results.engines:
+            row[f"{engine} finished"] = int((results.status.loc[members, engine] == "").sum())
+            if timeout is not None:
+                row[f"{engine} PAR2"] = penalised.loc[members, engine].mean()
+        rows.append(row)
+    return pandas.DataFrame(rows)
+
+
+def answers_table(results):
+    """Per engine: how many finished runs gave each answer, the answers of a run counted apart."""
+    answers = results.text(RESULT_METRIC)
+    if answers.empty:
+        return None
+    counts = {}
+    for engine in answers.columns:
+        # A run that failed has no answers; one that is merely unsolved still has.
+        given = answers[engine][~results.status[engine].isin(pyco_results.OUTCOME_CELLS)]
+        counts[engine] = given.str.split(",").explode().value_counts()
+    table = pandas.DataFrame(counts).T.fillna(0).astype(int)
+    return table.rename_axis("engine").reset_index()
 
 
 def pairwise_table(results, metric, baseline, timeout):
@@ -216,6 +254,11 @@ def pairwise_table(results, metric, baseline, timeout):
                 "median speed-up": speedup.median(),
                 "min speed-up": speedup.min() if len(speedup) else numpy.nan,
                 "max speed-up": speedup.max() if len(speedup) else numpy.nan,
+                # Of the summed metric, dominated by the hard instances the median overlooks.
+                "total speed-up": (
+                    values.loc[both, baseline].sum() / values.loc[both, engine].sum()
+                    if values.loc[both, engine].sum() > 0 else numpy.nan
+                ),
             }
         )
     return pandas.DataFrame(rows)
@@ -277,6 +320,15 @@ def parse_args():
     parser.add_argument(
         "-f", "--formats", default="pdf,png", help="figure formats to write (default: pdf,png)"
     )
+    parser.add_argument(
+        "-s", "--solved", default=None,
+        help="comma-separated answers (of the 'result' metric) a finished run must give to count as "
+        "solved, e.g. 'sat,unsat' (default: every finished run counts)",
+    )
+    parser.add_argument(
+        "--families", default=None,
+        help="';'-delimited .csv with a 'name' and a 'family' column; adds a per-family summary",
+    )
     parser.add_argument("--title", default=None, help="title of the figures")
     parser.add_argument("--no-plots", action="store_true", help="only write the tables")
     parser.add_argument("--no-tables", action="store_true", help="only write the figures")
@@ -298,6 +350,14 @@ def main():
     if baseline not in results.engines:
         parser.error(f"no such engine in {args.results}: {baseline} "
                      f"(have: {', '.join(results.engines)})")
+    if args.solved:
+        results.require_answers({answer.strip() for answer in args.solved.split(",")}, RESULT_METRIC)
+    families = None
+    if args.families:
+        frame = pandas.read_csv(args.families, sep=";", dtype=str, keep_default_na=False)
+        if not {"name", "family"} <= set(frame.columns):
+            parser.error(f"{args.families} needs a 'name' and a 'family' column")
+        families = frame.drop_duplicates("name").set_index("name")["family"]
 
     metrics = args.metric or [pyco_results.RUNTIME_METRIC]
     if "all" in metrics:
@@ -322,6 +382,11 @@ def main():
                 written += write_table(
                     pairwise_table(results, metric, baseline, args.timeout), outdir, f"pairwise-{metric}"
                 )
+            if families is not None:
+                written += write_table(
+                    family_table(results, metric, args.timeout, families), outdir,
+                    f"summary-by-family-{metric}",
+                )
         if not args.no_plots:
             written += cactus(results, metric, args.timeout, outdir, formats, args.title)
             for engine in results.engines:
@@ -329,6 +394,10 @@ def main():
                     written += scatter(
                         results, metric, baseline, engine, args.timeout, outdir, formats, args.title
                     )
+
+    answers = answers_table(results)
+    if answers is not None and not args.no_tables:
+        written += write_table(answers, outdir, "answers")
 
     differing = disagreements(results)
     if differing is not None and not differing.empty:

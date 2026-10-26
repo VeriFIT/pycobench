@@ -25,6 +25,13 @@ OUTCOME_CELLS = {
 # The cell pyco_proc writes for an engine that produced no row for the instance at all.
 MISSING_CELL = "MISSING"
 
+# The cell Results.require_answers() puts in place of the measurements of a run that finished
+# without an accepted answer.
+UNSOLVED_CELL = "UNSOLVED"
+
+# Every cell standing for a run status, by the name the status is reported under.
+STATUS_CELLS = {**OUTCOME_CELLS, UNSOLVED_CELL: "unsolved"}
+
 # The metric every engine reports, and therefore the one the engine names are read off.
 RUNTIME_METRIC = "runtime"
 
@@ -60,7 +67,7 @@ class Results:
             for column in columns:
                 cells[(engine, column[len(engine) + 1 :])] = frame[column].to_numpy()
             runtimes = frame[f"{engine}{suffix}"]
-            statuses[engine] = runtimes.where(runtimes.isin(OUTCOME_CELLS), "").to_numpy()
+            statuses[engine] = runtimes.where(runtimes.isin(STATUS_CELLS), "").to_numpy()
 
         self.cells = pandas.DataFrame(cells, index=self.instances)
         self.cells.columns = pandas.MultiIndex.from_tuples(
@@ -79,6 +86,26 @@ class Results:
         shared = set.intersection(*(set(self.cells[engine].columns) for engine in self.engines))
         return [RUNTIME_METRIC] + sorted(shared - {RUNTIME_METRIC})
 
+    def require_answers(self, accepted, metric):
+        """Counts a finished run as solved only when every answer in its @metric cell is @accepted.
+
+        A cell may list several answers separated by ','.  Every other metric of a finished run
+        that is not solved becomes UNSOLVED_CELL, so that it is reported and scored like a failure;
+        its @metric cell is kept.  An engine without a @metric column solves nothing.
+        """
+        for engine in self.engines:
+            finished = self.status[engine] == ""
+            if (engine, metric) in self.cells.columns:
+                answers = self.cells[(engine, metric)].map(lambda cell: set(str(cell).split(",")))
+                solved = answers.map(lambda seen: seen <= accepted)
+            else:
+                solved = pandas.Series(False, index=self.instances)
+            unsolved = finished & ~solved
+            for column in self.cells[engine].columns:
+                if column != metric:
+                    self.cells.loc[unsolved, (engine, column)] = UNSOLVED_CELL
+            self.status.loc[unsolved, engine] = UNSOLVED_CELL
+
     def numeric(self, metric, timeout=None, penalties=None):
         """The @metric of every engine as floats, indexed by instance.
 
@@ -90,7 +117,7 @@ class Results:
         penalties = penalties or {}
 
         def as_float(cell):
-            if cell in OUTCOME_CELLS:
+            if cell in STATUS_CELLS:
                 penalty = penalties.get(cell)
                 return penalty * timeout if penalty is not None and timeout is not None else numpy.nan
             try:
@@ -119,7 +146,7 @@ class Results:
         counts = {}
         for engine in self.engines:
             column = self.status[engine]
-            engine_counts = {cell: int((column == cell).sum()) for cell in OUTCOME_CELLS}
+            engine_counts = {cell: int((column == cell).sum()) for cell in STATUS_CELLS}
             engine_counts["finished"] = int((column == "").sum())
             counts[engine] = engine_counts
         return pandas.DataFrame(counts).T
