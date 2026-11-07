@@ -70,9 +70,7 @@ class Results:
             statuses[engine] = runtimes.where(runtimes.isin(STATUS_CELLS), "").to_numpy()
 
         self.cells = pandas.DataFrame(cells, index=self.instances)
-        self.cells.columns = pandas.MultiIndex.from_tuples(
-            self.cells.columns, names=["engine", "metric"]
-        )
+        self.cells.columns = pandas.MultiIndex.from_tuples(self.cells.columns, names=["engine", "metric"])
         # "" for a run that produced measurements, the status cell otherwise.
         self.status = pandas.DataFrame(statuses, index=self.instances)
 
@@ -122,7 +120,7 @@ class Results:
                 return penalty * timeout if penalty is not None and timeout is not None else numpy.nan
             try:
                 return float(cell)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 return numpy.nan
 
         columns = {
@@ -135,9 +133,7 @@ class Results:
     def text(self, metric):
         """The @metric of every engine as the raw cells, indexed by instance."""
         columns = {
-            engine: self.cells[(engine, metric)]
-            for engine in self.engines
-            if (engine, metric) in self.cells.columns
+            engine: self.cells[(engine, metric)] for engine in self.engines if (engine, metric) in self.cells.columns
         }
         return pandas.DataFrame(columns, index=self.instances)
 

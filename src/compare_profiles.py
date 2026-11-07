@@ -78,15 +78,11 @@ def build_penalties(args, parser):
     apply left to right and the individual --penalty-<cell> options take precedence over those.
     A penalty without --timeout is an error: the multiplier has nothing to scale.
     """
-    specified = args.penalty or any(
-        getattr(args, f"penalty_{cell.lower()}") is not None for cell in OUTCOME_CELLS
-    )
+    specified = args.penalty or any(getattr(args, f"penalty_{cell.lower()}") is not None for cell in OUTCOME_CELLS)
     if specified and args.timeout is None:
         parser.error("--penalty/--penalty-* require --timeout")
 
-    penalties = (
-        {cell: 2.0 for cell in OUTCOME_CELLS} if args.timeout is not None else {}
-    )
+    penalties = {cell: 2.0 for cell in OUTCOME_CELLS} if args.timeout is not None else {}
     for spec in args.penalty or []:
         for pair in spec.split(","):
             cell, sep, mult = pair.partition("=")
@@ -96,15 +92,11 @@ def build_penalties(args, parser):
                     f"--penalty: invalid pair '{pair.strip()}'; use CELL=MULT with CELL in "
                     f"({', '.join(cell.lower() for cell in OUTCOME_CELLS)})"
                 )
-            penalties[cell] = _parse_multiplier(
-                mult, parser, f"--penalty {pair.strip()}"
-            )
+            penalties[cell] = _parse_multiplier(mult, parser, f"--penalty {pair.strip()}")
     for cell in OUTCOME_CELLS:
         value = getattr(args, f"penalty_{cell.lower()}")
         if value is not None:
-            penalties[cell] = _parse_multiplier(
-                value, parser, f"--penalty-{cell.lower()}"
-            )
+            penalties[cell] = _parse_multiplier(value, parser, f"--penalty-{cell.lower()}")
     return penalties
 
 
@@ -143,9 +135,7 @@ def main():
         default=None,
         help="Fail with exit status 1 when target/baseline average ratio exceeds this value for any metric.",
     )
-    parser.add_argument(
-        "profiles", nargs="+", help="target.csv baseline1.csv ... baselinen.csv"
-    )
+    parser.add_argument("profiles", nargs="+", help="target.csv baseline1.csv ... baselinen.csv")
     args = parser.parse_args()
 
     penalties = build_penalties(args, parser)
@@ -153,9 +143,7 @@ def main():
     averages, medians, outcomes = [], [], []
     columns, outcome_columns = set(), set()
     for profile in profiles:
-        avg, med, outs = load_dataframe(
-            profile, timeout=args.timeout, penalties=penalties
-        )
+        avg, med, outs = load_dataframe(profile, timeout=args.timeout, penalties=penalties)
         columns.update(list(avg.keys()))
         averages.append(avg)
         medians.append(med)
@@ -186,12 +174,7 @@ def main():
     reported_cells = [
         cell
         for cell in OUTCOME_CELLS
-        if any(
-            outcomes[i][col][cell]
-            for i in range(len(profiles))
-            for col in outcome_columns
-            if col in outcomes[i]
-        )
+        if any(outcomes[i][col][cell] for i in range(len(profiles)) for col in outcome_columns if col in outcomes[i])
     ]
 
     if not reported_cells:
@@ -205,9 +188,7 @@ def main():
         for col in sorted(outcome_columns):
             row = [col]
             for i in range(len(profiles)):
-                row += [
-                    outcomes[i].get(col, {}).get(cell, 0) for cell in reported_cells
-                ]
+                row += [outcomes[i].get(col, {}).get(cell, 0) for cell in reported_cells]
             data.append(row)
 
         print(tabulate.tabulate(data, headers=headers, floatfmt=".3f"))
@@ -220,11 +201,7 @@ def main():
         for col in columns:
             baseline_avg = averages[1][col]
             target_avg = averages[0][col]
-            if (
-                not numpy.isfinite(target_avg)
-                or not numpy.isfinite(baseline_avg)
-                or baseline_avg == 0
-            ):
+            if not numpy.isfinite(target_avg) or not numpy.isfinite(baseline_avg) or baseline_avg == 0:
                 data.append([col, float("nan")])
                 continue
             ratio = target_avg / baseline_avg
@@ -236,9 +213,7 @@ def main():
 
         if regressions:
             for col, ratio in regressions:
-                print(
-                    f"REGRESSION: '{col}' slowed down {ratio:.3f}x past the threshold {args.threshold}."
-                )
+                print(f"REGRESSION: '{col}' slowed down {ratio:.3f}x past the threshold {args.threshold}.")
             return 1
     return 0
 

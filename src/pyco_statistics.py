@@ -54,12 +54,8 @@ class StatisticsParser:
     def stats(self) -> dict:
         return self._stats
 
-    def print_stats(
-        self, stats_file: io.TextIOWrapper, format: StatsFormat = StatsFormat.JSON
-    ) -> None:
-        formatted_stats = StatisticsParser.stats_formatter(
-            stats=self.stats, format=format
-        )
+    def print_stats(self, stats_file: io.TextIOWrapper, format: StatsFormat = StatsFormat.JSON) -> None:
+        formatted_stats = StatisticsParser.stats_formatter(stats=self.stats, format=format)
         formatted_stats += "\n"
         stats_file.write(formatted_stats)
 
@@ -97,6 +93,4 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
-    StatisticsParser(input_data=args.statistics_file.read()).print_stats(
-        stats_file=args.output, format=args.format
-    )
+    StatisticsParser(input_data=args.statistics_file.read()).print_stats(stats_file=args.output, format=args.format)

@@ -65,9 +65,7 @@ def proc_res(fd, args):
     processes results of pycobench.py from file descriptor 'fd' using command line
     arguments 'args'
     """
-    reader = csv.reader(
-        fd, delimiter=";", quotechar='"', doublequote=False, quoting=csv.QUOTE_MINIMAL
-    )
+    reader = csv.reader(fd, delimiter=";", quotechar='"', doublequote=False, quoting=csv.QUOTE_MINIMAL)
 
     engines = []
     engines_outs = {}
@@ -145,9 +143,7 @@ def proc_res(fd, args):
                             assert engine_stats_name not in eng_res["output"]
                             if engine_stats_name not in engines_outs[eng]:
                                 engines_outs[eng].append(engine_stats_name)
-                            eng_res["output"][engine_stats_name] = StatisticsParser(
-                                inner_block
-                            ).stats
+                            eng_res["output"][engine_stats_name] = StatisticsParser(inner_block).stats
                         elif inner_block_type == InnerBlockType.MODEL:
                             # TODO: Add model block handling.
                             # print("model:")
@@ -212,9 +208,7 @@ def proc_res(fd, args):
         elif status != "execute":
             # "execute" rows are the task list pycobench writes before running anything.
             # Everything else is a status this version cannot render.
-            sys.stderr.write(
-                f"Warning: in {params} and {eng}: unknown run status '{status}'\n"
-            )
+            sys.stderr.write(f"Warning: in {params} and {eng}: unknown run status '{status}'\n")
 
     list_ptrns = []
     for bench in results:
@@ -248,9 +242,7 @@ def proc_res(fd, args):
                             if out == "stats":
                                 if args.stats == StatsDestination.SEPARATE_FILES:
                                     stats_file_name = f"{eng}-{bench[0].replace('/', '_').replace('.', '_')}-stats.json"
-                                    with open(
-                                        f"./stats/{current_time}/{stats_file_name}", "w"
-                                    ) as f:
+                                    with open(f"./stats/{current_time}/{stats_file_name}", "w") as f:
                                         f.write(out_data)
                                 elif args.stats == StatsDestination.OUTPUT_FILE:
                                     if args.csv:
@@ -261,8 +253,7 @@ def proc_res(fd, args):
 
                         else:
                             sys.stderr.write(
-                                f"Warning: in {bench} and {eng}: element {out} not in "
-                                f"{bench_res['output']}\n"
+                                f"Warning: in {bench} and {eng}: element {out} not in {bench_res['output']}\n"
                             )
                             ls.append("MISSING")
                             # assert False
@@ -323,9 +314,7 @@ def proc_res(fd, args):
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(
-        description="Processes results of benchmarks from pycobench.py"
-    )
+    parser = argparse.ArgumentParser(description="Processes results of benchmarks from pycobench.py")
     parser.add_argument(
         "result_file",
         nargs="?",

@@ -24,7 +24,7 @@ import subprocess
 def run(*cmd, cwd=None):
     try:
         out = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, check=True)
-    except (OSError, subprocess.CalledProcessError):
+    except OSError, subprocess.CalledProcessError:
         return None
     return out.stdout.strip()
 
@@ -85,14 +85,36 @@ def engine(values, parser):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("-o", "--output", required=True, help="the JSON file to write")
-    parser.add_argument("--engine", nargs="+", action="append", default=[], metavar=("NAME", "KEY=VALUE"),
-                        help="an engine of the run and what describes it, e.g. 'z3 rev=v4.13 commit=3a1f'")
-    parser.add_argument("--set", nargs=2, action="append", default=[], metavar=("KEY", "VALUE"),
-                        help="a setting of the run, e.g. 'timeout 60'")
-    parser.add_argument("--file", action="append", default=[],
-                        help="a file the run depends on (configuration, inputs), recorded with its hash")
-    parser.add_argument("--repository", nargs=2, action="append", default=[], metavar=("NAME", "PATH"),
-                        help="a git or jj repository the run depends on, recorded with its commit")
+    parser.add_argument(
+        "--engine",
+        nargs="+",
+        action="append",
+        default=[],
+        metavar=("NAME", "KEY=VALUE"),
+        help="an engine of the run and what describes it, e.g. 'z3 rev=v4.13 commit=3a1f'",
+    )
+    parser.add_argument(
+        "--set",
+        nargs=2,
+        action="append",
+        default=[],
+        metavar=("KEY", "VALUE"),
+        help="a setting of the run, e.g. 'timeout 60'",
+    )
+    parser.add_argument(
+        "--file",
+        action="append",
+        default=[],
+        help="a file the run depends on (configuration, inputs), recorded with its hash",
+    )
+    parser.add_argument(
+        "--repository",
+        nargs=2,
+        action="append",
+        default=[],
+        metavar=("NAME", "PATH"),
+        help="a git or jj repository the run depends on, recorded with its commit",
+    )
     parser.add_argument("--cpus", nargs="+", default=[], help="the CPUs the run is pinned to")
     args = parser.parse_args()
 

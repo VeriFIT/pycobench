@@ -10,13 +10,14 @@
 
 # WARNING: The results expects that the header will be the same for all processed benchmarks !!!
 
-usage() { {
-        [ $# -gt 0 ] && echo "error: $1"
-        echo "usage: ./process_pyco.sh [opt1, ..., optn] [bench1, ..., benchm]"
-        echo "options:"
-        echo "  -o|--output-file<result.csv>>     target output file[default=result.csv]"
-        echo "  -p|--number-of-params<int>        number of params in target"
-    } >&2
+usage() {
+  {
+    [ $# -gt 0 ] && echo "error: $1"
+    echo "usage: ./process_pyco.sh [opt1, ..., optn] [bench1, ..., benchm]"
+    echo "options:"
+    echo "  -o|--output-file<result.csv>>     target output file[default=result.csv]"
+    echo "  -p|--number-of-params<int>        number of params in target"
+  } >&2
 }
 
 output_file=result.csv
@@ -24,32 +25,38 @@ benchmarks=()
 basedir=$(realpath "$(dirname "$0")")
 rootdir=$(realpath "$basedir/..")
 python="${PYCOBENCH_PYTHON:-$rootdir/.venv/bin/python3}"
-[ -x "$python" ] || { echo "error: Python environment not found at $python. Run 'uv sync' in $rootdir first." >&2; exit 1; }
+[ -x "$python" ] || {
+  echo "error: Python environment not found at $python. Run 'uv sync' in $rootdir first." >&2
+  exit 1
+}
 number_of_params=1
 
 # Processes the arguments
 while [ $# -gt 0 ]; do
-    case "$1" in
-        -h|--help)
-            usage
-            exit 0;;
-        -o|--output-file)
-            output_file=$2
-            shift 2;;
-        -p|--number-of-params)
-            number_of_params=$2
-            shift 2;;
-        *)
-            benchmarks+=( "$1" )
-            shift 1;;
-    esac
+  case "$1" in
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  -o | --output-file)
+    output_file=$2
+    shift 2
+    ;;
+  -p | --number-of-params)
+    number_of_params=$2
+    shift 2
+    ;;
+  *)
+    benchmarks+=("$1")
+    shift 1
+    ;;
+  esac
 done
 
 # $1: filename, $2: extension
 # Adds extension $2 to the $filename, unless it already contains it
-escape_extension () {
-  if [[ "$1" == *.$2 ]];
-  then
+escape_extension() {
+  if [[ $1 == *.$2 ]]; then
     echo "$1"
   else
     echo "$1.$2"
@@ -59,8 +66,7 @@ escape_extension () {
 # $1: filename, $2: directory
 # Adds $2 directory before the filename, unless it already contains it
 prepend_directory() {
-  if [[ "$1" == $2/* ]];
-  then
+  if [[ $1 == $2/* ]]; then
     echo "$1"
   else
     echo "$2/$1"
@@ -69,29 +75,26 @@ prepend_directory() {
 
 processed_header=false
 
-
 # For each benchmark
-for benchmark in "${benchmarks[@]}"
-do
-    # We ensure that the results are in results/data directory
-    result_file=$(basename "$benchmark")
-    benchmark_file=$benchmark
+for benchmark in "${benchmarks[@]}"; do
+  # We ensure that the results are in results/data directory
+  result_file=$(basename "$benchmark")
+  benchmark_file=$benchmark
 
-    # Each partial result is transformed using `pyco_proc` to csv representation
-    echo "Processing $benchmark_file"
-    echo "Benchmark file: $benchmark_file"
-    echo "Benchmark: $benchmark"
-    env -u PYTHONPATH "$python" "$basedir"/pyco_proc.py --csv --params-num "$number_of_params" --output "$result_file.csv" "$benchmark_file"
-    if [ $processed_header = false ];
-    then
-      # For first result we ensure that the header will be there
-      processed_header=true
-      cat "$result_file.csv" > "$output_file"
-    else
-      # We cat rest of the results
-      awk 'FNR > 1' "$result_file.csv" >> "$output_file"
-    fi
-    rm "$result_file.csv"
+  # Each partial result is transformed using `pyco_proc` to csv representation
+  echo "Processing $benchmark_file"
+  echo "Benchmark file: $benchmark_file"
+  echo "Benchmark: $benchmark"
+  env -u PYTHONPATH "$python" "$basedir"/pyco_proc.py --csv --params-num "$number_of_params" --output "$result_file.csv" "$benchmark_file"
+  if [ $processed_header = false ]; then
+    # For first result we ensure that the header will be there
+    processed_header=true
+    cat "$result_file.csv" >"$output_file"
+  else
+    # We cat rest of the results
+    awk 'FNR > 1' "$result_file.csv" >>"$output_file"
+  fi
+  rm "$result_file.csv"
 done
 
 echo "[!] Saved results to $output_file"
