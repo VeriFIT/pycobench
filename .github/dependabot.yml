@@ -1,0 +1,23 @@
+version: 2
+# One weekly pull request bumping flake.lock and uv.lock together.
+multi-ecosystem-groups:
+  deps:
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "deps: +chore "
+updates:
+  - package-ecosystem: "nix"
+    directory: "/"
+    patterns: ["*"]
+    multi-ecosystem-group: "deps"
+    cooldown:
+      default-days: 7
+  # Lock file only: the lower bounds in pyproject.toml stay as loose as the code allows.
+  - package-ecosystem: "uv"
+    directory: "/"
+    versioning-strategy: "lockfile-only"
+    patterns: ["*"]
+    multi-ecosystem-group: "deps"
+    cooldown:
+      default-days: 7
