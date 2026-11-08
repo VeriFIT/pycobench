@@ -212,16 +212,21 @@ def run_subproc(cmd):
 
 
 ###########################################
-def limit_virtual_memory(cpu_affinity):
-    if g_memout is not None:
-        # The tuple below is of the form (soft limit, hard limit). Limit only
-        # the soft part so that the limit can be increased later (setting also
-        # the hard limit would prevent that).
-        # When the limit cannot be changed, setrlimit() raises ValueError.
-        resource.setrlimit(resource.RLIMIT_AS, (g_memout * 1024 * 1024 * 1024, resource.RLIM_INFINITY))
+def limits_prefix(cpu_affinity):
+    """limits_prefix(list) -> list
 
-    p = psutil.Process()
-    p.cpu_affinity(cpu_affinity)
+    Returns the command prefix that applies the memory limit and the CPU affinity
+    to the command it runs.  Both tools exec the command, so the limits need no
+    Python code in the forked child, which is unsafe next to the worker threads.
+    """
+    prefix = []
+    if g_memout is not None:
+        # Limit only the soft part ("soft:" keeps the hard limit) so that the
+        # limit can be increased later.
+        prefix += ["prlimit", f"--as={g_memout * 1024 * 1024 * 1024}:"]
+    if cpu_affinity:
+        prefix += ["taskset", "--cpu-list", ",".join(map(str, cpu_affinity))]
+    return prefix
 
 
 ###########################################
@@ -332,15 +337,8 @@ def run_subproc_systime(cmd, cpu_affinity, return_codes):
     catch-all entry is refined into "crash" when the command died on a signal
     and into "memout" when it reached the memory limit.
     """
-    cmd = g_time_cmd + cmd
-    proc = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        # preexec_fn is a callable object that will be called in the child process
-        # just before the child is executed.
-        preexec_fn=lambda: limit_virtual_memory(cpu_affinity),
-    )
+    cmd = limits_prefix(cpu_affinity) + g_time_cmd + cmd
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     result = {}
     try:
         outs, errs = proc.communicate(timeout=g_timeout)

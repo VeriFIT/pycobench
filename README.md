@@ -86,3 +86,6 @@ disagreement is reported on standard error.
 With GNU time available, the peak resident set size of every run is measured
 and reported in a `<engine>-maxrss` column (in kB). BSD time (e.g. on macOS)
 does not support the required format, in which case no memory is reported.
+
+The memory limit (`--memout`) and the CPU affinity are applied by running each
+command under `prlimit` and `taskset` from util-linux, so they need Linux.

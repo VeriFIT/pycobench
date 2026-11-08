@@ -53,7 +53,8 @@
             for script in pycobench pyco_proc pyco_merge pyco_manifest compare_profiles; do
               makeWrapper ${pythonEnv}/bin/python3 "$out/bin/$script" \
                 --add-flags "$out/share/pycobench/$script.py" \
-                --set PYTHONPATH "$out/share/pycobench"
+                --set PYTHONPATH "$out/share/pycobench" \
+                --suffix PATH : "${pkgs.lib.makeBinPath [ pkgs.util-linux ]}"
             done
 
             makeWrapper "$out/share/pycobench/process_pyco.sh" "$out/bin/process_pyco" \
