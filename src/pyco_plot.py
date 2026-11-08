@@ -51,7 +51,7 @@ def _import_pyplot():
         import matplotlib
 
         matplotlib.use("Agg")
-        import matplotlib.pyplot as pyplot
+        from matplotlib import pyplot
     except ImportError:
         print(
             "error: plotting needs matplotlib; install it or pass --no-plots",

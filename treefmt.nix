@@ -8,9 +8,11 @@
     yamlfmt.enable = true;
     taplo.enable = true;
     shfmt.enable = true;
+    ruff-check.enable = true;
     ruff-format = {
       enable = true;
       lineLength = 120;
+      priority = 1;
     };
   };
 }

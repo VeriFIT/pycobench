@@ -39,7 +39,7 @@ def load_dataframe(path, timeout=None, penalties=None):
 
     try:
         df = pandas.read_csv(path, sep=";")
-    except Exception as ex:
+    except (OSError, ValueError) as ex:
         print(f"error while reading from {path}: {ex}")
         sys.exit(1)
     outcomes = {

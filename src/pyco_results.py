@@ -152,10 +152,13 @@ def load(path):
     """Reads the result table at @path, exiting with a message when it cannot be read."""
     try:
         frame = pandas.read_csv(path, sep=";", dtype=str, keep_default_na=False)
-    except Exception as ex:
+    except (OSError, ValueError) as ex:
         print(f"error while reading from {path}: {ex}", file=sys.stderr)
         sys.exit(1)
     if "name" not in frame.columns:
-        print(f"error: {path} has no 'name' column, so it is not a result table", file=sys.stderr)
+        print(
+            f"error: {path} has no 'name' column, so it is not a result table",
+            file=sys.stderr,
+        )
         sys.exit(1)
     return Results(frame, path=path)

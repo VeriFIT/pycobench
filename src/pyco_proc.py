@@ -9,8 +9,9 @@ import sys
 from enum import Enum
 from pathlib import Path
 
-from pyco_statistics import StatisticsParser, StatsFormat
 from tabulate import tabulate
+
+from pyco_statistics import StatisticsParser, StatsFormat
 
 #  fmt = 'text'
 fmt = "csv"
@@ -71,7 +72,7 @@ def proc_res(fd, args):
     engines_outs = {}
     results = {}
 
-    current_time = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    current_time = datetime.datetime.now().astimezone().strftime("%Y-%m-%d-%H-%M-%S")
     if args.stats and args.stats == StatsDestination.SEPARATE_FILES:
         Path(f"./stats/{current_time}/").mkdir(parents=True, exist_ok=True)
 
@@ -211,13 +212,13 @@ def proc_res(fd, args):
             sys.stderr.write(f"Warning: in {params} and {eng}: unknown run status '{status}'\n")
 
     list_ptrns = []
-    for bench in results:
+    for bench, bench_results in results.items():
         all_engs = True
         ls = list(bench)
         for eng in engines:
             out_len = len(engines_outs[eng]) + 1  # +1 = time
-            if eng in results[bench]:
-                bench_res = results[bench][eng]
+            if eng in bench_results:
+                bench_res = bench_results[eng]
                 for out in engines_outs[eng]:
                     if out == "stats" and "output" in bench_res:
                         bench_res["output"][out] = StatisticsParser.stats_formatter(
@@ -310,7 +311,7 @@ def proc_res(fd, args):
         writer.writerows(list_ptrns)
         return output.getvalue()
     else:
-        raise Exception(f'Invalid output format: "{fmt}"')
+        raise ValueError(f'Invalid output format: "{fmt}"')
 
 
 def parse_args():

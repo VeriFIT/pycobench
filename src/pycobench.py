@@ -43,6 +43,7 @@
 #
 
 import argparse
+import contextlib
 import csv
 import glob
 import os
@@ -192,6 +193,10 @@ def remove_newlines(text):
     return text.replace("\n", g_newline_sep)
 
 
+class ConfigError(Exception):
+    """An invalid benchmark configuration or command line."""
+
+
 ###########################################
 def run_subproc(cmd):
     """run_subproc(cmd) -> dict()
@@ -199,8 +204,7 @@ def run_subproc(cmd):
     Runs a command as a subprocess and collects results.
     """
     rusage_before = resource.getrusage(resource.RUSAGE_CHILDREN)
-    # proc = subprocess.run(cmd, timeout=g_timeout, capture_output=True)
-    proc = subprocess.run(cmd, timeout=g_timeout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    proc = subprocess.run(cmd, timeout=g_timeout, capture_output=True, check=False)
     rusage_after = resource.getrusage(resource.RUSAGE_CHILDREN)
     result = {}
     result["retcode"] = proc.returncode
@@ -242,11 +246,11 @@ def probe_time_cmd():
     try:
         probe = subprocess.run(
             ["time", "-f", "maxrss %M", "true"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             timeout=10,
+            check=False,
         )
-    except Exception:
+    except OSError, subprocess.SubprocessError:
         return
 
     if probe.returncode == 0 and re.search(r"maxrss\s+\d+", probe.stderr.decode()):
@@ -343,10 +347,8 @@ def run_subproc_systime(cmd, cpu_affinity, return_codes):
     try:
         outs, errs = proc.communicate(timeout=g_timeout)
     except subprocess.TimeoutExpired:
-        try:
+        with contextlib.suppress(psutil.Error):  # do not care
             kill_proc_tree(proc.pid, sig=signal.SIGKILL, include_parent=True)
-        except Exception:
-            pass  # do not care
 
         raise
 
@@ -396,11 +398,11 @@ def substitute_cmd(in_cmd, in_params):
         if len(cmd[i]) == 2 and cmd[i][0] == "$" and cmd[i][1] != "(":
             try:
                 x = int(cmd[i][1])
-            except Exception:
-                raise Exception('invalid placeholder "' + cmd[i] + '" in the command to run')
+            except ValueError:
+                raise ConfigError('invalid placeholder "' + cmd[i] + '" in the command to run') from None
 
             if x > len(in_params):
-                raise Exception(
+                raise ConfigError(
                     "parameter "
                     + cmd[i]
                     + " not provided (only "
@@ -420,7 +422,6 @@ def execute_benchmark(params, cpu_affinity):
 
     Executes one benchmark.
     """
-    global g_cmd_dict
     name = params["method"]
     in_params = params["params"]
     # in_params = in_params.split()
@@ -542,28 +543,26 @@ def parse_return_codes(meth, raw_codes):
     answer the code stands for, e.g. {status: finished, result: unsat}.
     """
     if not isinstance(raw_codes, dict):
-        raise Exception('"return_codes" for method "{}" must be a mapping from return codes to statuses'.format(meth))
+        raise TypeError(f'"return_codes" for method "{meth}" must be a mapping from return codes to statuses')
 
     parsed = {}
     for code, spec in raw_codes.items():
         if code != CATCH_ALL_CODE and not isinstance(code, int):
-            raise Exception(
-                'invalid return code "{}" for method "{}"; use an integer or "{}"'.format(code, meth, CATCH_ALL_CODE)
-            )
+            raise ConfigError(f'invalid return code "{code}" for method "{meth}"; use an integer or "{CATCH_ALL_CODE}"')
         if isinstance(spec, str):
             spec = {"status": spec}
         if not isinstance(spec, dict) or "status" not in spec:
-            raise Exception('return code "{}" of method "{}" needs a status'.format(code, meth))
+            raise ConfigError(f'return code "{code}" of method "{meth}" needs a status')
 
         unknown_keys = set(spec) - {"status", "result"}
         if unknown_keys:
-            raise Exception(
+            raise ConfigError(
                 'return code "{}" of method "{}" has unknown key(s): {}'.format(
                     code, meth, ", ".join(sorted(unknown_keys))
                 )
             )
         if spec["status"] not in CONFIGURABLE_STATUSES:
-            raise Exception(
+            raise ConfigError(
                 'invalid status "{}" for return code "{}" of method "{}"; use one of: {}'.format(
                     spec["status"], code, meth, ", ".join(sorted(CONFIGURABLE_STATUSES))
                 )
@@ -594,10 +593,10 @@ def process_conf_file(conf_file):
     for meth in g_cmd_dict:
         x = g_cmd_dict[meth]
         if x is None:
-            raise Exception('Missing configuration for method "{}"'.format(meth))
+            raise ConfigError(f'Missing configuration for method "{meth}"')
         merged = {**defaults, **x}
         if "cmd" not in merged:
-            raise Exception('Missing "cmd" value for method "{}"'.format(meth))
+            raise ConfigError(f'Missing "cmd" value for method "{meth}"')
         # a method that maps return codes replaces the default mapping as a
         # whole, so that it cannot silently inherit a status it does not want
         merged["return_codes"] = parse_return_codes(meth, merged.get("return_codes", g_default_return_codes))
@@ -622,7 +621,7 @@ def prepare_list_of_tasks_from_tasklist(tasklist_filename):
                     executed_tasks.add((row[1], row[2]))
                 elif row[0] == "finished":
                     finished_tasks.add((row[1], row[2]))
-        except Exception as ex:
+        except (csv.Error, IndexError) as ex:
             print("Error reading a task list at line " + str(reader.line_num) + ": " + str(ex))
             sys.exit(1)
 
@@ -647,10 +646,10 @@ def run_main(args):
     if args.methods:
         methods = args.methods.split(";")
         methods = [meth for meth in methods if meth != ""]
-        new_cmd_dict = dict()
+        new_cmd_dict = {}
         for m in methods:
             if m not in g_cmd_dict:
-                raise Exception("Invalid method selected: {}".format(m))
+                raise ConfigError(f"Invalid method selected: {m}")
 
             new_cmd_dict[m] = g_cmd_dict[m]
 
@@ -659,7 +658,7 @@ def run_main(args):
     if args.exclude:
         methods = args.exclude.split(";")
         methods = [meth for meth in methods if meth != ""]
-        new_cmd_dict = dict()
+        new_cmd_dict = {}
         for m in g_cmd_dict:
             if m not in methods:
                 new_cmd_dict[m] = g_cmd_dict[m]

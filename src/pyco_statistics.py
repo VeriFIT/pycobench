@@ -4,9 +4,8 @@ import argparse
 import io
 import json
 import sys
+from collections.abc import Sequence
 from enum import Enum
-
-from typing_extensions import Sequence
 
 
 class StatsFormat(Enum):
@@ -79,7 +78,7 @@ def parse_args():
     )
     parser.add_argument(
         "--format",
-        choices=list(format_option.name.lower() for format_option in StatsFormat),
+        choices=[format_option.name.lower() for format_option in StatsFormat],
         default=StatsFormat.JSON.value,
         help="Which format to use for printing statistics (default: '%(default)s')",
     )
