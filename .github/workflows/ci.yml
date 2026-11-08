@@ -1,0 +1,25 @@
+name: CI
+on:
+  push:
+    branches: [master]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  nix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: cachix/install-nix-action@v31
+      - uses: actions/checkout@v6
+      - name: Check the formatting
+        run: nix flake check --print-build-logs
+      - name: Build the package
+        run: nix build --print-build-logs .#default
+      - name: Run every script of the package
+        run: |
+          for script in pycobench pyco_proc compare_profiles; do
+              nix run ".#$script" -- --help > /dev/null
+          done
+      - name: Check that uv.lock matches pyproject.toml
+        run: nix develop --command uv lock --check

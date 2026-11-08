@@ -4,6 +4,10 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
+    treefmt-nix = {
+      url = "github:numtide/treefmt-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -11,11 +15,13 @@
       self,
       nixpkgs,
       flake-utils,
+      treefmt-nix,
     }:
     flake-utils.lib.eachDefaultSystem (
       system:
       let
         pkgs = import nixpkgs { inherit system; };
+        treefmt = treefmt-nix.lib.evalModule pkgs ./treefmt.nix;
 
         # Keep in sync with the `dependencies` in pyproject.toml.
         pythonEnv = pkgs.python3.withPackages (
@@ -47,7 +53,8 @@
             for script in pycobench pyco_proc pyco_merge pyco_manifest compare_profiles; do
               makeWrapper ${pythonEnv}/bin/python3 "$out/bin/$script" \
                 --add-flags "$out/share/pycobench/$script.py" \
-                --set PYTHONPATH "$out/share/pycobench"
+                --set PYTHONPATH "$out/share/pycobench" \
+                --suffix PATH : "${pkgs.lib.makeBinPath [ pkgs.util-linux ]}"
             done
 
             makeWrapper "$out/share/pycobench/process_pyco.sh" "$out/bin/process_pyco" \
@@ -62,6 +69,9 @@
       {
         packages.default = pycobench;
         packages.pycobench = pycobench;
+
+        formatter = treefmt.config.build.wrapper;
+        checks.treefmt = treefmt.config.build.check self;
 
         apps.default = {
           type = "app";

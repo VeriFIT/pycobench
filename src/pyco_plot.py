@@ -51,7 +51,7 @@ def _import_pyplot():
         import matplotlib
 
         matplotlib.use("Agg")
-        import matplotlib.pyplot as pyplot
+        from matplotlib import pyplot
     except ImportError:
         print(
             "error: plotting needs matplotlib; install it or pass --no-plots",
@@ -105,8 +105,14 @@ def scatter(results, metric, baseline, engine, timeout, outdir, formats, title):
 
     solved = ~both["x_failed"] & ~both["y_failed"]
     axes.scatter(
-        both.loc[solved, "x"], both.loc[solved, "y"],
-        s=12, alpha=0.6, edgecolors="none", color="tab:blue", label="both finished", zorder=3,
+        both.loc[solved, "x"],
+        both.loc[solved, "y"],
+        s=12,
+        alpha=0.6,
+        edgecolors="none",
+        color="tab:blue",
+        label="both finished",
+        zorder=3,
     )
     for mask, color, marker, label in (
         (both["x_failed"] & ~both["y_failed"], "tab:green", "<", f"{baseline} failed"),
@@ -115,8 +121,14 @@ def scatter(results, metric, baseline, engine, timeout, outdir, formats, title):
     ):
         if mask.any():
             axes.scatter(
-                both.loc[mask, "x"], both.loc[mask, "y"],
-                s=18, alpha=0.8, color=color, marker=marker, label=label, zorder=2,
+                both.loc[mask, "x"],
+                both.loc[mask, "y"],
+                s=18,
+                alpha=0.8,
+                color=color,
+                marker=marker,
+                label=label,
+                zorder=2,
             )
 
     axes.set_xscale("log")
@@ -182,9 +194,7 @@ def summary_table(results, metric, timeout):
             "instances": len(values),
             "finished": int(counts.loc[engine, "finished"]),
         }
-        row.update(
-            {STATUS_CELLS[cell]: int(counts.loc[engine, cell]) for cell in STATUS_CELLS}
-        )
+        row.update({STATUS_CELLS[cell]: int(counts.loc[engine, cell]) for cell in STATUS_CELLS})
         row.update(
             {
                 "mean": finished.mean(),
@@ -257,7 +267,8 @@ def pairwise_table(results, metric, baseline, timeout):
                 # Of the summed metric, dominated by the hard instances the median overlooks.
                 "total speed-up": (
                     values.loc[both, baseline].sum() / values.loc[both, engine].sum()
-                    if values.loc[both, engine].sum() > 0 else numpy.nan
+                    if values.loc[both, engine].sum() > 0
+                    else numpy.nan
                 ),
             }
         )
@@ -284,8 +295,7 @@ def write_table(table, outdir, stem, floatfmt=".4g"):
     for extension, tablefmt in TABLE_FORMATS.items():
         path = outdir / f"{stem}.{extension}"
         path.write_text(
-            tabulate.tabulate(table, headers="keys", showindex=False, tablefmt=tablefmt, floatfmt=floatfmt)
-            + "\n"
+            tabulate.tabulate(table, headers="keys", showindex=False, tablefmt=tablefmt, floatfmt=floatfmt) + "\n"
         )
         written.append(path)
     return written
@@ -297,36 +307,48 @@ def parse_args():
     )
     parser.add_argument("results", help="the ';'-delimited .csv written by process_pyco.sh")
     parser.add_argument(
-        "-m", "--metric", action="append", default=None,
-        help="metric to report; repeatable, defaults to 'runtime'. 'all' reports every metric "
-        "that all engines share.",
+        "-m",
+        "--metric",
+        action="append",
+        default=None,
+        help="metric to report; repeatable, defaults to 'runtime'. 'all' reports every metric that all engines share.",
     )
     parser.add_argument(
-        "-t", "--timeout", type=float, default=None,
+        "-t",
+        "--timeout",
+        type=float,
+        default=None,
         help="timeout (in seconds) of the run; draws the limit and scores failures as PAR-2",
     )
     parser.add_argument(
-        "-b", "--baseline", default=None,
+        "-b",
+        "--baseline",
+        default=None,
         help="engine the others are compared against (default: the first one in the table)",
     )
     parser.add_argument(
-        "-e", "--engines", default=None,
+        "-e",
+        "--engines",
+        default=None,
         help="comma-separated engines to report, in this order (default: all of them)",
     )
     parser.add_argument(
-        "-o", "--output-dir", default=None,
+        "-o",
+        "--output-dir",
+        default=None,
         help="where to write the report (default: '<results>-report' next to the table)",
     )
+    parser.add_argument("-f", "--formats", default="pdf,png", help="figure formats to write (default: pdf,png)")
     parser.add_argument(
-        "-f", "--formats", default="pdf,png", help="figure formats to write (default: pdf,png)"
-    )
-    parser.add_argument(
-        "-s", "--solved", default=None,
+        "-s",
+        "--solved",
+        default=None,
         help="comma-separated answers (of the 'result' metric) a finished run must give to count as "
         "solved, e.g. 'sat,unsat' (default: every finished run counts)",
     )
     parser.add_argument(
-        "--families", default=None,
+        "--families",
+        default=None,
         help="';'-delimited .csv with a 'name' and a 'family' column; adds a per-family summary",
     )
     parser.add_argument("--title", default=None, help="title of the figures")
@@ -343,13 +365,11 @@ def main():
         selected = [engine.strip() for engine in args.engines.split(",") if engine.strip()]
         unknown = [engine for engine in selected if engine not in results.engines]
         if unknown:
-            parser.error(f"no such engine in {args.results}: {', '.join(unknown)} "
-                         f"(have: {', '.join(results.engines)})")
+            parser.error(f"no such engine in {args.results}: {', '.join(unknown)} (have: {', '.join(results.engines)})")
         results.engines = selected
     baseline = args.baseline or results.engines[0]
     if baseline not in results.engines:
-        parser.error(f"no such engine in {args.results}: {baseline} "
-                     f"(have: {', '.join(results.engines)})")
+        parser.error(f"no such engine in {args.results}: {baseline} (have: {', '.join(results.engines)})")
     if args.solved:
         results.require_answers({answer.strip() for answer in args.solved.split(",")}, RESULT_METRIC)
     families = None
@@ -372,8 +392,7 @@ def main():
         reporting = [engine for engine in results.engines if (engine, metric) in results.cells.columns]
         if len(reporting) < len(results.engines):
             missing = set(results.engines) - set(reporting)
-            print(f"warning: skipping metric '{metric}', not reported by {', '.join(sorted(missing))}",
-                  file=sys.stderr)
+            print(f"warning: skipping metric '{metric}', not reported by {', '.join(sorted(missing))}", file=sys.stderr)
             continue
 
         if not args.no_tables:
@@ -384,16 +403,15 @@ def main():
                 )
             if families is not None:
                 written += write_table(
-                    family_table(results, metric, args.timeout, families), outdir,
+                    family_table(results, metric, args.timeout, families),
+                    outdir,
                     f"summary-by-family-{metric}",
                 )
         if not args.no_plots:
             written += cactus(results, metric, args.timeout, outdir, formats, args.title)
             for engine in results.engines:
                 if engine != baseline:
-                    written += scatter(
-                        results, metric, baseline, engine, args.timeout, outdir, formats, args.title
-                    )
+                    written += scatter(results, metric, baseline, engine, args.timeout, outdir, formats, args.title)
 
     answers = answers_table(results)
     if answers is not None and not args.no_tables:
@@ -404,8 +422,7 @@ def main():
         path = outdir / "disagreements.csv"
         differing.to_csv(path)
         written.append(path)
-        print(f"warning: {len(differing)} instance(s) with differing answers, see {path}",
-              file=sys.stderr)
+        print(f"warning: {len(differing)} instance(s) with differing answers, see {path}", file=sys.stderr)
 
     for path in written:
         print(path)

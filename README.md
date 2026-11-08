@@ -1,25 +1,31 @@
 # pycobench
+
 A small Python framework for running benchmarks.
 
 Contents:
-* `src/pycobench.py`: The main script for running benchmarks
-* `src/pyco_proc.py`: The script for processing the output of `pycobench.py` into a table
-* `src/compare_profiles.py`: Compares averages/medians/timeouts across one or more result CSVs
-* `src/pyco_merge.py`: Merges the result tables of repeated runs into one, keeping the minimum of every measurement
-* `src/pyco_manifest.py`: Records the engines, settings, input hashes, repository revisions and machine of a run as JSON
-* `examples/ba-compl.yaml`: Example of a YAML file for configuring what to run
-* `examples/ba-all.input`: Example of a file with input benchmarks
+
+- `src/pycobench.py`: The main script for running benchmarks
+- `src/pyco_proc.py`: The script for processing the output of `pycobench.py` into a table
+- `src/compare_profiles.py`: Compares averages/medians/timeouts across one or more result CSVs
+- `src/pyco_merge.py`: Merges the result tables of repeated runs into one, keeping the minimum of every measurement
+- `src/pyco_manifest.py`: Records the engines, settings, input hashes, repository revisions and machine of a run as JSON
+- `examples/ba-compl.yaml`: Example of a YAML file for configuring what to run
+- `examples/ba-all.input`: Example of a file with input benchmarks
 
 Setup (dependencies are managed by [uv](https://docs.astral.sh/uv/)):
+
 ```
 uv sync
 ```
 
 How to run:
+
 ```
 cat benchmarks.input | uv run src/pycobench.py -c config.yaml -j JOBS -t TIMEOUT -o OUTPUT_FILE
 ```
+
 When the benchmarks finish, you can process the results by
+
 ```
 cat OUTPUT_FILE | uv run src/pyco_proc.py --csv > OUTPUT_CSV
 ```
@@ -27,6 +33,7 @@ cat OUTPUT_FILE | uv run src/pyco_proc.py --csv > OUTPUT_CSV
 The configuration file maps each engine to the command used to run it. Settings
 shared by all engines can be given once in a reserved top-level `defaults`
 section, where per-engine values take precedence:
+
 ```yaml
 defaults:
   return_codes:
@@ -49,13 +56,13 @@ my-solver:
 Every run ends in exactly one status, recorded in the output file and rendered
 by `pyco_proc.py` in every column of the engine:
 
-| status     | cell    | meaning                                                      |
-| ---------- | ------- | ------------------------------------------------------------ |
-| `finished` |         | the run produced measurements                                 |
-| `error`    | `ERR`   | the run ended in a way that does not count as an answer       |
-| `timeout`  | `TO`    | the run exceeded `--timeout` and was killed                   |
-| `memout`   | `MO`    | the run reached the memory limit given by `--memout`          |
-| `crash`    | `CRASH` | the run was killed by a signal (segfault, abort, ...)         |
+| status     | cell    | meaning                                                 |
+| ---------- | ------- | ------------------------------------------------------- |
+| `finished` |         | the run produced measurements                           |
+| `error`    | `ERR`   | the run ended in a way that does not count as an answer |
+| `timeout`  | `TO`    | the run exceeded `--timeout` and was killed             |
+| `memout`   | `MO`    | the run reached the memory limit given by `--memout`    |
+| `crash`    | `CRASH` | the run was killed by a signal (segfault, abort, ...)   |
 
 `return_codes` maps a return code to the status it stands for, with `"*"`
 matching every code without an entry of its own (the default mapping is
@@ -79,3 +86,6 @@ disagreement is reported on standard error.
 With GNU time available, the peak resident set size of every run is measured
 and reported in a `<engine>-maxrss` column (in kB). BSD time (e.g. on macOS)
 does not support the required format, in which case no memory is reported.
+
+The memory limit (`--memout`) and the CPU affinity are applied by running each
+command under `prlimit` and `taskset` from util-linux, so they need Linux.

@@ -1,33 +1,23 @@
 seminator:
   cmd: bin/seminator-wrap.sh $1
-
 spot:
   cmd: bin/spot-wrap.sh $1
-
 safra:
   cmd: bin/goal-wrap.sh $1 -m safra
-
 piterman:
   cmd: bin/goal-wrap.sh $1 -m piterman
-
 schewe:
   cmd: bin/goal-wrap.sh $1 -m rank -tr -ro
-
 fribourg:
   cmd: bin/goal-wrap.sh $1 -m fribourg
-
 ltl2dstar:
   cmd: bin/ltl2dstar-wrap.sh $1
-
 roll:
   cmd: bin/roll-wrap.sh $1
-
 ranker-maxr:
   cmd: bin/ranker-wrap.sh $1
-
 ranker-rrestr:
   cmd: bin/ranker-tight-wrap.sh $1
-
 # backoff
 ranker-maxr-bo:
   cmd: bin/ranker-composition-wrap.sh $1

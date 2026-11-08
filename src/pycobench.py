@@ -43,6 +43,7 @@
 #
 
 import argparse
+import contextlib
 import csv
 import glob
 import os
@@ -118,9 +119,7 @@ STATUS_CRASH = "crash"
 
 # the statuses a "return_codes" configuration entry may assign; "timeout" is
 # never a property of a return code, it is observed by pycobench itself
-CONFIGURABLE_STATUSES = frozenset(
-    {STATUS_FINISHED, STATUS_ERROR, STATUS_MEMOUT, STATUS_CRASH}
-)
+CONFIGURABLE_STATUSES = frozenset({STATUS_FINISHED, STATUS_ERROR, STATUS_MEMOUT, STATUS_CRASH})
 
 # how each status is reported on the terminal
 STATUS_LABELS = {
@@ -167,9 +166,7 @@ def get_cpu_affiliation(worker_idx: int) -> list[int]:
 
 ###########################################
 # taken from https://psutil.readthedocs.io/en/latest/#kill-process-tree
-def kill_proc_tree(
-    pid, sig=signal.SIGTERM, include_parent=True, timeout=None, on_terminate=None
-):
+def kill_proc_tree(pid, sig=signal.SIGTERM, include_parent=True, timeout=None, on_terminate=None):
     """Kill a process tree (including grandchildren) with signal
     "sig" and return a (gone, still_alive) tuple.
     "on_terminate", if specified, is a callback function that is
@@ -196,6 +193,10 @@ def remove_newlines(text):
     return text.replace("\n", g_newline_sep)
 
 
+class ConfigError(Exception):
+    """An invalid benchmark configuration or command line."""
+
+
 ###########################################
 def run_subproc(cmd):
     """run_subproc(cmd) -> dict()
@@ -203,10 +204,7 @@ def run_subproc(cmd):
     Runs a command as a subprocess and collects results.
     """
     rusage_before = resource.getrusage(resource.RUSAGE_CHILDREN)
-    # proc = subprocess.run(cmd, timeout=g_timeout, capture_output=True)
-    proc = subprocess.run(
-        cmd, timeout=g_timeout, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-    )
+    proc = subprocess.run(cmd, timeout=g_timeout, capture_output=True, check=False)
     rusage_after = resource.getrusage(resource.RUSAGE_CHILDREN)
     result = {}
     result["retcode"] = proc.returncode
@@ -218,18 +216,21 @@ def run_subproc(cmd):
 
 
 ###########################################
-def limit_virtual_memory(cpu_affinity):
-    if g_memout is not None:
-        # The tuple below is of the form (soft limit, hard limit). Limit only
-        # the soft part so that the limit can be increased later (setting also
-        # the hard limit would prevent that).
-        # When the limit cannot be changed, setrlimit() raises ValueError.
-        resource.setrlimit(
-            resource.RLIMIT_AS, (g_memout * 1024 * 1024 * 1024, resource.RLIM_INFINITY)
-        )
+def limits_prefix(cpu_affinity):
+    """limits_prefix(list) -> list
 
-    p = psutil.Process()
-    p.cpu_affinity(cpu_affinity)
+    Returns the command prefix that applies the memory limit and the CPU affinity
+    to the command it runs.  Both tools exec the command, so the limits need no
+    Python code in the forked child, which is unsafe next to the worker threads.
+    """
+    prefix = []
+    if g_memout is not None:
+        # Limit only the soft part ("soft:" keeps the hard limit) so that the
+        # limit can be increased later.
+        prefix += ["prlimit", f"--as={g_memout * 1024 * 1024 * 1024}:"]
+    if cpu_affinity:
+        prefix += ["taskset", "--cpu-list", ",".join(map(str, cpu_affinity))]
+    return prefix
 
 
 ###########################################
@@ -245,11 +246,11 @@ def probe_time_cmd():
     try:
         probe = subprocess.run(
             ["time", "-f", "maxrss %M", "true"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             timeout=10,
+            check=False,
         )
-    except Exception:
+    except OSError, subprocess.SubprocessError:
         return
 
     if probe.returncode == 0 and re.search(r"maxrss\s+\d+", probe.stderr.decode()):
@@ -340,23 +341,14 @@ def run_subproc_systime(cmd, cpu_affinity, return_codes):
     catch-all entry is refined into "crash" when the command died on a signal
     and into "memout" when it reached the memory limit.
     """
-    cmd = g_time_cmd + cmd
-    proc = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        # preexec_fn is a callable object that will be called in the child process
-        # just before the child is executed.
-        preexec_fn=lambda: limit_virtual_memory(cpu_affinity),
-    )
+    cmd = limits_prefix(cpu_affinity) + g_time_cmd + cmd
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     result = {}
     try:
         outs, errs = proc.communicate(timeout=g_timeout)
     except subprocess.TimeoutExpired:
-        try:
+        with contextlib.suppress(psutil.Error):  # do not care
             kill_proc_tree(proc.pid, sig=signal.SIGKILL, include_parent=True)
-        except Exception:
-            pass  # do not care
 
         raise
 
@@ -390,9 +382,7 @@ def run_subproc_systime(cmd, cpu_affinity, return_codes):
 
     if status == STATUS_FINISHED and not measured:
         status = STATUS_ERROR
-        result["stderr"] = remove_newlines(
-            "Could not extract measured time\n" + result["stderr"]
-        )
+        result["stderr"] = remove_newlines("Could not extract measured time\n" + result["stderr"])
 
     result["status"] = status
     if run_result is not None:
@@ -408,13 +398,11 @@ def substitute_cmd(in_cmd, in_params):
         if len(cmd[i]) == 2 and cmd[i][0] == "$" and cmd[i][1] != "(":
             try:
                 x = int(cmd[i][1])
-            except Exception:
-                raise Exception(
-                    'invalid placeholder "' + cmd[i] + '" in the command to run'
-                )
+            except ValueError:
+                raise ConfigError('invalid placeholder "' + cmd[i] + '" in the command to run') from None
 
             if x > len(in_params):
-                raise Exception(
+                raise ConfigError(
                     "parameter "
                     + cmd[i]
                     + " not provided (only "
@@ -434,7 +422,6 @@ def execute_benchmark(params, cpu_affinity):
 
     Executes one benchmark.
     """
-    global g_cmd_dict
     name = params["method"]
     in_params = params["params"]
     # in_params = in_params.split()
@@ -448,9 +435,7 @@ def execute_benchmark(params, cpu_affinity):
                 executed_cmd.extend(sorted(glob.glob(c)))
             else:
                 executed_cmd.append(c)
-        result = run_subproc_systime(
-            executed_cmd, cpu_affinity, g_cmd_dict[name]["return_codes"]
-        )
+        result = run_subproc_systime(executed_cmd, cpu_affinity, g_cmd_dict[name]["return_codes"])
         return result
     except subprocess.TimeoutExpired:
         return {"status": STATUS_TIMEOUT}
@@ -558,36 +543,27 @@ def parse_return_codes(meth, raw_codes):
     answer the code stands for, e.g. {status: finished, result: unsat}.
     """
     if not isinstance(raw_codes, dict):
-        raise Exception(
-            '"return_codes" for method "{}" must be a mapping from return codes '
-            "to statuses".format(meth)
-        )
+        raise TypeError(f'"return_codes" for method "{meth}" must be a mapping from return codes to statuses')
 
     parsed = {}
     for code, spec in raw_codes.items():
         if code != CATCH_ALL_CODE and not isinstance(code, int):
-            raise Exception(
-                'invalid return code "{}" for method "{}"; use an integer or '
-                '"{}"'.format(code, meth, CATCH_ALL_CODE)
-            )
+            raise ConfigError(f'invalid return code "{code}" for method "{meth}"; use an integer or "{CATCH_ALL_CODE}"')
         if isinstance(spec, str):
             spec = {"status": spec}
         if not isinstance(spec, dict) or "status" not in spec:
-            raise Exception(
-                'return code "{}" of method "{}" needs a status'.format(code, meth)
-            )
+            raise ConfigError(f'return code "{code}" of method "{meth}" needs a status')
 
         unknown_keys = set(spec) - {"status", "result"}
         if unknown_keys:
-            raise Exception(
+            raise ConfigError(
                 'return code "{}" of method "{}" has unknown key(s): {}'.format(
                     code, meth, ", ".join(sorted(unknown_keys))
                 )
             )
         if spec["status"] not in CONFIGURABLE_STATUSES:
-            raise Exception(
-                'invalid status "{}" for return code "{}" of method "{}"; use one '
-                "of: {}".format(
+            raise ConfigError(
+                'invalid status "{}" for return code "{}" of method "{}"; use one of: {}'.format(
                     spec["status"], code, meth, ", ".join(sorted(CONFIGURABLE_STATUSES))
                 )
             )
@@ -617,15 +593,13 @@ def process_conf_file(conf_file):
     for meth in g_cmd_dict:
         x = g_cmd_dict[meth]
         if x is None:
-            raise Exception('Missing configuration for method "{}"'.format(meth))
+            raise ConfigError(f'Missing configuration for method "{meth}"')
         merged = {**defaults, **x}
         if "cmd" not in merged:
-            raise Exception('Missing "cmd" value for method "{}"'.format(meth))
+            raise ConfigError(f'Missing "cmd" value for method "{meth}"')
         # a method that maps return codes replaces the default mapping as a
         # whole, so that it cannot silently inherit a status it does not want
-        merged["return_codes"] = parse_return_codes(
-            meth, merged.get("return_codes", g_default_return_codes)
-        )
+        merged["return_codes"] = parse_return_codes(meth, merged.get("return_codes", g_default_return_codes))
         g_cmd_dict[meth] = merged
 
 
@@ -639,9 +613,7 @@ def prepare_list_of_tasks_from_tasklist(tasklist_filename):
     executed_tasks = set()
     finished_tasks = set()
     with open(tasklist_filename, "r") as tasklist_file:
-        reader = csv.reader(
-            tasklist_file, delimiter=";", quotechar='"', quoting=csv.QUOTE_MINIMAL
-        )
+        reader = csv.reader(tasklist_file, delimiter=";", quotechar='"', quoting=csv.QUOTE_MINIMAL)
         try:
             for row in reader:
                 # create two sets
@@ -649,13 +621,8 @@ def prepare_list_of_tasks_from_tasklist(tasklist_filename):
                     executed_tasks.add((row[1], row[2]))
                 elif row[0] == "finished":
                     finished_tasks.add((row[1], row[2]))
-        except Exception as ex:
-            print(
-                "Error reading a task list at line "
-                + str(reader.line_num)
-                + ": "
-                + str(ex)
-            )
+        except (csv.Error, IndexError) as ex:
+            print("Error reading a task list at line " + str(reader.line_num) + ": " + str(ex))
             sys.exit(1)
 
     unfinished_business = executed_tasks - finished_tasks
@@ -679,10 +646,10 @@ def run_main(args):
     if args.methods:
         methods = args.methods.split(";")
         methods = [meth for meth in methods if meth != ""]
-        new_cmd_dict = dict()
+        new_cmd_dict = {}
         for m in methods:
             if m not in g_cmd_dict:
-                raise Exception("Invalid method selected: {}".format(m))
+                raise ConfigError(f"Invalid method selected: {m}")
 
             new_cmd_dict[m] = g_cmd_dict[m]
 
@@ -691,7 +658,7 @@ def run_main(args):
     if args.exclude:
         methods = args.exclude.split(";")
         methods = [meth for meth in methods if meth != ""]
-        new_cmd_dict = dict()
+        new_cmd_dict = {}
         for m in g_cmd_dict:
             if m not in methods:
                 new_cmd_dict[m] = g_cmd_dict[m]
@@ -835,8 +802,7 @@ if __name__ == "__main__":
         metavar="METHODS",
         type=str,
         dest="methods",
-        help="Which methods from the configuration file to "
-        "execute, separated by ';' (default: all)",
+        help="Which methods from the configuration file to execute, separated by ';' (default: all)",
     )
     parser.add_argument(
         "-e",
@@ -844,8 +810,7 @@ if __name__ == "__main__":
         metavar="METHODS",
         type=str,
         dest="exclude",
-        help="Which methods from the configuration file will be ignored,"
-        "separated by ';' (default=None)",
+        help="Which methods from the configuration file will be ignored,separated by ';' (default=None)",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="verbose output")
     parser.add_argument(
