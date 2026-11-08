@@ -1,0 +1,24 @@
+name: Dependabot auto-merge
+on: pull_request
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  enable-auto-merge:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      # The required `nix` check gates the merge. Updates of the actions are left to a maintainer, as the workflow
+      #  using them only runs after a merge.
+      - name: Enable auto-merge for lock file updates
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          # A separate assignment, so that a failed fetch fails the step (bash -e) instead of reading as no match.
+          files=$(gh pr diff "$PR_URL" --name-only)
+          if grep --quiet '^\.github/' <<<"$files"; then
+              echo "The pull request changes .github/; leaving the merge to a maintainer."
+          else
+              gh pr merge "$PR_URL" --auto --merge
+          fi
