@@ -65,6 +65,9 @@ g_task_queue = queue.Queue()
 # thread-safe queue for collecting results
 g_result_queue = queue.Queue()
 
+# set when a worker fails, so that the other workers stop taking new tasks
+g_abort = threading.Event()
+
 # a dictionary of commands to run
 g_cmd_dict = {}
 
@@ -454,14 +457,19 @@ def worker(cpu_affinity):
 
     Main function of a thread for processing tasks.
     """
-    while True:
-        item = g_task_queue.get()
-        if item is None:  # None signals end of processing
-            g_result_queue.put(None)  # signal termination of worker
-            break
-        res = execute_benchmark(item, cpu_affinity)
-        g_result_queue.put(merge_two_dicts(item, res))
-        g_task_queue.task_done()
+    try:
+        while True:
+            item = g_task_queue.get()
+            if item is None or g_abort.is_set():  # None signals end of processing
+                break
+            res = execute_benchmark(item, cpu_affinity)
+            g_result_queue.put(merge_two_dicts(item, res))
+    except BaseException:
+        g_abort.set()
+        raise
+    finally:
+        # without this, the main thread would wait for the worker forever
+        g_result_queue.put(None)  # signal termination of worker
 
 
 ###########################################
@@ -749,6 +757,9 @@ def run_main(args):
     # a barrier
     for t in threads:
         t.join()
+
+    if g_abort.is_set():
+        sys.exit("error: a worker failed (see the traceback above); the unfinished tasks can be resumed with -f")
 
 
 ###########################################
