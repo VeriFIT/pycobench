@@ -201,6 +201,14 @@ class ConfigError(Exception):
 
 
 ###########################################
+def truncate_output(text):
+    """Keep the tail of complete newline-delimited records."""
+    if len(text) <= OUTPUT_LIMIT:
+        return text
+    return text[-OUTPUT_LIMIT:].partition("\n")[2]
+
+
+###########################################
 def run_subproc(cmd):
     """run_subproc(cmd) -> dict()
 
@@ -367,8 +375,8 @@ def run_subproc_systime(cmd, cpu_affinity, return_codes):
         print("======= ^^^^^^ =======")
 
     # limit too big outputs
-    result["stdout"] = result["stdout"][-OUTPUT_LIMIT:]
-    result["stderr"] = result["stderr"][-OUTPUT_LIMIT:]
+    result["stdout"] = truncate_output(result["stdout"])
+    result["stderr"] = truncate_output(result["stderr"])
 
     measured = extract_measurements(result)
     status, run_result, explicit = classify_return_code(return_codes, result["retcode"])
