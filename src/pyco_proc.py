@@ -211,15 +211,18 @@ def proc_res(fd, args):
             # Everything else is a status this version cannot render.
             sys.stderr.write(f"Warning: in {params} and {eng}: unknown run status '{status}'\n")
 
+    # A metric can first appear in any run (e.g. the return code adds 'result').
+    # Every row and the header must use the same order of the global metrics.
+    metric_order = {eng: sorted(engines_outs[eng]) for eng in engines}
     list_ptrns = []
     for bench, bench_results in results.items():
         all_engs = True
         ls = list(bench)
         for eng in engines:
-            out_len = len(engines_outs[eng]) + 1  # +1 = time
+            out_len = len(metric_order[eng]) + 1  # +1 = time
             if eng in bench_results:
                 bench_res = bench_results[eng]
-                for out in engines_outs[eng]:
+                for out in metric_order[eng]:
                     if out == "stats" and "output" in bench_res:
                         bench_res["output"][out] = StatisticsParser.stats_formatter(
                             bench_res["output"][out], args.stats_format
@@ -236,7 +239,7 @@ def proc_res(fd, args):
                     assert "output" in bench_res
 
                     ls.append(bench_res["runtime"])
-                    for out in engines_outs[eng]:
+                    for out in metric_order[eng]:
                         if out in bench_res["output"]:
                             out_data = bench_res["output"][out]
 
@@ -279,7 +282,7 @@ def proc_res(fd, args):
     header += ["name"]
     for eng in engines:
         header += [eng + "-runtime"]
-        for out in engines_outs[eng]:
+        for out in metric_order[eng]:
             if out == "stats" and args.stats != StatsDestination.OUTPUT_FILE:
                 continue
             header += [eng + "-" + out]
