@@ -108,5 +108,48 @@ class OutputTruncationTest(unittest.TestCase):
         self.measure({"mata-base.left": (stdout, 1.25)})
 
 
+class TimeoutResultTest(unittest.TestCase):
+    def test_timeout_preserves_process_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory)
+            program = directory / "sleeper.py"
+            program.write_text(
+                "import sys\n"
+                "import time\n"
+                "print('stdout before timeout')\n"
+                "print('stderr before timeout', file=sys.stderr)\n"
+                "time.sleep(60)\n"
+            )
+            config = directory / "config.yaml"
+            config.write_text(json.dumps({"sleeper": {"cmd": f"{sys.executable} -u {program} $1"}}))
+            log = directory / "timeout.log"
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(Path(pycobench.__file__).resolve()),
+                    "--conf",
+                    str(config),
+                    "--timeout",
+                    "1",
+                    "--output",
+                    str(log),
+                ],
+                input="case.mata\n",
+                text=True,
+                capture_output=True,
+                check=True,
+                timeout=30,
+            )
+
+            with log.open(newline="") as output:
+                row = next(row for row in csv.reader(output, delimiter=";") if row[0] == "timeout")
+            self.assertEqual(row[1:3], ["sleeper", "case.mata"])
+            self.assertNotEqual(row[3], "")
+            self.assertEqual(row[4], "stdout before timeout")
+            self.assertEqual(row[5], "stderr before timeout")
+            self.assertEqual(row[6], "1")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -71,7 +71,8 @@ legitimate result). A per-engine mapping replaces the default one as a whole.
 `timeout` is observed by pycobench and cannot be assigned to a return code; a
 code left to the catch-all entry is refined automatically into `crash` when the
 command died on a signal, or into `memout` when its peak memory reached
-`--memout`.
+`--memout`. Timeout rows retain the return code and any stdout/stderr emitted
+before the process was killed for diagnostics.
 
 ### Answers of the engines
 
