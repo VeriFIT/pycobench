@@ -350,7 +350,9 @@ def run_subproc_systime(cmd, cpu_affinity, return_codes):
     measured using the system "time" command.  The run is classified into one of
     the statuses according to "return_codes"; a return code matched only by the
     catch-all entry is refined into "crash" when the command died on a signal
-    and into "memout" when it reached the memory limit.
+    and into "memout" when it reached the memory limit.  A successfully
+    killed timeout returns the collected output; a failed kill raises
+    ``subprocess.TimeoutExpired``.
     """
     cmd = limits_prefix(cpu_affinity) + g_time_cmd + cmd
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -360,8 +362,11 @@ def run_subproc_systime(cmd, cpu_affinity, return_codes):
     except subprocess.TimeoutExpired:
         with contextlib.suppress(psutil.Error):  # do not care
             kill_proc_tree(proc.pid, sig=signal.SIGKILL, include_parent=True)
-
-        raise
+            # Reading the pipes before a successful kill could block forever.
+            outs, errs = proc.communicate()
+            result["status"] = STATUS_TIMEOUT
+        if "status" not in result:
+            raise
 
     result["retcode"] = proc.returncode
     result["stdout"] = outs.decode().strip()
@@ -377,6 +382,9 @@ def run_subproc_systime(cmd, cpu_affinity, return_codes):
     # limit too big outputs
     result["stdout"] = truncate_output(result["stdout"])
     result["stderr"] = truncate_output(result["stderr"])
+
+    if result.get("status") == STATUS_TIMEOUT:
+        return result
 
     measured = extract_measurements(result)
     status, run_result, explicit = classify_return_code(return_codes, result["retcode"])
