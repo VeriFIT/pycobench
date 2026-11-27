@@ -7,7 +7,12 @@
     nixfmt.enable = true;
     yamlfmt.enable = true;
     taplo.enable = true;
-    shfmt.enable = true;
+    # treefmt-nix no longer sets shfmt options by default; keep the established style.
+    shfmt = {
+      enable = true;
+      indent_size = 2;
+      simplify = true;
+    };
     ruff-check.enable = true;
     ruff-format = {
       enable = true;
